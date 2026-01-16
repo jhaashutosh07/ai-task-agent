@@ -251,3 +251,8 @@ export async function getUsageStats(): Promise<{
 export function isAuthenticated(): boolean {
   return !!getAccessToken();
 }
+
+// Aliases for different naming conventions
+export const listApiKeys = listAPIKeys;
+export const createApiKey = createAPIKey;
+export const revokeApiKey = revokeAPIKey;
