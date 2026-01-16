@@ -164,7 +164,7 @@ export default function TemplateGallery({ onSelect, onClose }: TemplateGalleryPr
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const categories = [...new Set(templates.map((t) => t.category))];
+  const categories = Array.from(new Set(templates.map((t) => t.category)));
 
   const filteredTemplates = templates.filter((t) => {
     const matchesSearch =

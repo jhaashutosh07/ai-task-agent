@@ -59,6 +59,14 @@ export async function getSettings(): Promise<Settings> {
   return response.json();
 }
 
+export async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
+  const response = await authFetch(`${API_BASE}/api/settings`, {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+  return response.json();
+}
+
 export async function getInfo(): Promise<any> {
   const response = await fetch(`${API_BASE}/api/info`);
   return response.json();

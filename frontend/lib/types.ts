@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   events?: AgentEvent[];
+  images?: string[];
 }
 
 export interface AgentEvent {
