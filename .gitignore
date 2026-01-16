@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+backend/venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment files (contains secrets)
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Build outputs
+.next/
+out/
+.nuxt/
+
+# Testing
+coverage/
+.pytest_cache/
+htmlcov/
+
+# Misc
+*.bak
+*.tmp
+workspace/
+
+# Windows reserved names
+nul
+con
+prn
+aux
+
+# Temp files
+tmpclaude-*
