@@ -6,8 +6,13 @@ import secrets
 
 from config import settings
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing - bcrypt__default_rounds for security, truncate_error=False for compatibility
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12,
+    bcrypt__truncate_error=False
+)
 
 # JWT Settings
 ALGORITHM = "HS256"
