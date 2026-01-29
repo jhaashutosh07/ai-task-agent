@@ -25,23 +25,34 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate):
     """Register a new user"""
-    # Check if email already exists
-    existing_user = await get_user_by_email(user_data.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+    try:
+        # Check if email already exists
+        existing_user = await get_user_by_email(user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+
+        # Create user with hashed password
+        hashed_password = get_password_hash(user_data.password)
+        user = await create_user(
+            email=user_data.email,
+            username=user_data.username,
+            hashed_password=hashed_password
         )
 
-    # Create user with hashed password
-    hashed_password = get_password_hash(user_data.password)
-    user = await create_user(
-        email=user_data.email,
-        username=user_data.username,
-        hashed_password=hashed_password
-    )
-
-    return user
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Registration error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
 
 
 @router.post("/login", response_model=Token)
