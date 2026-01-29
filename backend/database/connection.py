@@ -4,15 +4,20 @@ from sqlalchemy import select, update, delete
 from datetime import datetime, timedelta
 from typing import Optional, List
 import os
+from pathlib import Path
 
 from .models import Base, UserModel, APIKeyModel, UsageLogModel
 from auth.models import User, UserInDB, APIKey
 from auth.jwt_handler import verify_api_key
 from config import settings
 
+# Ensure data directory exists
+data_dir = Path(settings.auth_db_path).parent
+data_dir.mkdir(parents=True, exist_ok=True)
+
 # Create async engine
 DATABASE_URL = f"sqlite+aiosqlite:///{settings.auth_db_path}"
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 
 # Create async session factory
 async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
