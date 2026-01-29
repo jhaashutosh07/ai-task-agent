@@ -166,7 +166,8 @@ def initialize_agents():
         agents=components["agents"],
         tools=tools
     )
-    print(f"Initialized {len(components["agents"])} specialized agents + orchestrator")
+    agents_count = len(components["agents"])
+    print(f"Initialized {agents_count} specialized agents + orchestrator")
 
 
 def initialize_memory():
