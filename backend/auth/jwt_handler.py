@@ -6,13 +6,8 @@ import secrets
 
 from config import settings
 
-# Password hashing - bcrypt__default_rounds for security, truncate_error=False for compatibility
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12,
-    bcrypt__truncate_error=False
-)
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT Settings
 ALGORITHM = "HS256"
@@ -20,16 +15,12 @@ ALGORITHM = "HS256"
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
-    # Truncate to 72 bytes for bcrypt compatibility
-    truncated = plain_password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.verify(truncated, hashed_password)
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password"""
-    # Truncate to 72 bytes for bcrypt compatibility
-    truncated = password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.hash(truncated)
+    return pwd_context.hash(password)
 
 
 def create_access_token(
