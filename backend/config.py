@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     access_token_expire_minutes: int = Field(default=30)
     refresh_token_expire_days: int = Field(default=7)
-    auth_db_path: str = Field(default="./data/auth.db")
+    auth_db_path: str = Field(default=os.environ.get("AUTH_DB_PATH", "./data/auth.db"))
 
     # Rate Limiting
     rate_limit_per_minute: int = Field(default=60)
