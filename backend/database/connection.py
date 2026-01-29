@@ -1,5 +1,4 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import select, update, delete
 from datetime import datetime, timedelta
 from typing import Optional, List
@@ -17,10 +16,10 @@ data_dir.mkdir(parents=True, exist_ok=True)
 
 # Create async engine
 DATABASE_URL = f"sqlite+aiosqlite:///{settings.auth_db_path}"
-engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
+engine = create_async_engine(DATABASE_URL, echo=False)
 
 # Create async session factory
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def init_db():
