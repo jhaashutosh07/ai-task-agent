@@ -48,7 +48,11 @@ class Settings(BaseSettings):
     # Server Settings
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=8000)
-    cors_origins: list[str] = Field(default=["http://localhost:3000"])
+    cors_origins: list[str] = Field(default=[
+        "http://localhost:3000",
+        "https://frontend-tau-two-87.vercel.app",
+        "https://frontend-80mw0q69e-ashutoshs-projects-236a165e.vercel.app"
+    ])
 
     # Authentication Settings
     jwt_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(32))

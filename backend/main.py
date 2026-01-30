@@ -214,8 +214,8 @@ async def initialize_all():
 
 
 # Include API routes
-app.include_router(router, prefix="/api")
-app.include_router(auth_router, prefix="/api")
+app.include_router(router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
