@@ -12,22 +12,8 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    """User registration model with strong password requirements"""
-    password: str = Field(..., min_length=12, max_length=100)
-
-    @field_validator('password')
-    @classmethod
-    def validate_password_strength(cls, v: str) -> str:
-        """Ensure password meets security requirements"""
-        if not re.search(r'[A-Z]', v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not re.search(r'[a-z]', v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not re.search(r'\d', v):
-            raise ValueError('Password must contain at least one digit')
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>\-_=+\[\]\\;\'`~]', v):
-            raise ValueError('Password must contain at least one special character')
-        return v
+    """User registration model"""
+    password: str = Field(..., min_length=8, max_length=100)
 
 
 class UserLogin(BaseModel):
