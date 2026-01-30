@@ -1,6 +1,7 @@
 // Authentication utilities for frontend
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_PREFIX = '/api/v1';
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'ai_agent_access_token';
@@ -102,7 +103,7 @@ export function getAuthHeaders(): HeadersInit {
 
 // API calls
 export async function login(credentials: LoginCredentials): Promise<AuthTokens> {
-  const response = await fetch(`${API_BASE}/api/auth/login`, {
+  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(credentials),
@@ -119,7 +120,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthTokens> 
 }
 
 export async function register(data: RegisterData): Promise<User> {
-  const response = await fetch(`${API_BASE}/api/auth/register`, {
+  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -138,7 +139,7 @@ export async function refreshAccessToken(): Promise<AuthTokens | null> {
   if (!refreshToken) return null;
 
   try {
-    const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+    const response = await fetch(`${API_BASE}${API_PREFIX}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
@@ -163,7 +164,7 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!token) return null;
 
   try {
-    const response = await fetch(`${API_BASE}/api/auth/me`, {
+    const response = await fetch(`${API_BASE}${API_PREFIX}/auth/me`, {
       headers: getAuthHeaders(),
     });
 
@@ -193,7 +194,7 @@ export async function logout(): Promise<void> {
 
 // API Key management
 export async function createAPIKey(name: string): Promise<{ key: string; id: string }> {
-  const response = await fetch(`${API_BASE}/api/auth/api-keys`, {
+  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/api-keys`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({ name }),
@@ -208,7 +209,7 @@ export async function createAPIKey(name: string): Promise<{ key: string; id: str
 }
 
 export async function listAPIKeys(): Promise<APIKey[]> {
-  const response = await fetch(`${API_BASE}/api/auth/api-keys`, {
+  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/api-keys`, {
     headers: getAuthHeaders(),
   });
 
@@ -220,7 +221,7 @@ export async function listAPIKeys(): Promise<APIKey[]> {
 }
 
 export async function revokeAPIKey(keyId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/auth/api-keys/${keyId}`, {
+  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/api-keys/${keyId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
@@ -236,7 +237,7 @@ export async function getUsageStats(): Promise<{
   tokens_quota: number;
   total_tokens_used: number;
 }> {
-  const response = await fetch(`${API_BASE}/api/auth/usage`, {
+  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/usage`, {
     headers: getAuthHeaders(),
   });
 

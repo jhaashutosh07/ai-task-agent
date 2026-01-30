@@ -2,6 +2,7 @@ import { ChatResponse, Settings } from './types';
 import { getAccessToken, refreshAccessToken, clearTokens } from './auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_PREFIX = '/api/v1';
 
 // Helper to get auth headers
 function getAuthHeaders(): HeadersInit {
@@ -36,7 +37,7 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
 
 // Chat API
 export async function sendMessage(message: string): Promise<ChatResponse> {
-  const response = await authFetch(`${API_BASE}/api/chat`, {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/chat`, {
     method: 'POST',
     body: JSON.stringify({ message }),
   });
@@ -45,22 +46,22 @@ export async function sendMessage(message: string): Promise<ChatResponse> {
 }
 
 export async function clearChat(): Promise<void> {
-  await authFetch(`${API_BASE}/api/chat/clear`, { method: 'POST' });
+  await authFetch(`${API_BASE}${API_PREFIX}/chat/clear`, { method: 'POST' });
 }
 
 export async function getHistory(): Promise<{ history: any[] }> {
-  const response = await authFetch(`${API_BASE}/api/chat/history`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/chat/history`);
   return response.json();
 }
 
 // Settings API
 export async function getSettings(): Promise<Settings> {
-  const response = await authFetch(`${API_BASE}/api/settings`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/settings`);
   return response.json();
 }
 
 export async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
-  const response = await authFetch(`${API_BASE}/api/settings`, {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/settings`, {
     method: 'PUT',
     body: JSON.stringify(settings),
   });
@@ -68,25 +69,25 @@ export async function updateSettings(settings: Partial<Settings>): Promise<Setti
 }
 
 export async function getInfo(): Promise<any> {
-  const response = await fetch(`${API_BASE}/api/info`);
+  const response = await fetch(`${API_BASE}${API_PREFIX}/info`);
   return response.json();
 }
 
 // Memory API
 export async function searchMemory(query: string, limit: number = 5): Promise<any> {
-  const url = `${API_BASE}/api/memory/search?query=${encodeURIComponent(query)}&limit=${limit}`;
+  const url = `${API_BASE}${API_PREFIX}/memory/search?query=${encodeURIComponent(query)}&limit=${limit}`;
   const response = await authFetch(url);
   return response.json();
 }
 
 export async function getMemoryStats(): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/memory/stats`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/memory/stats`);
   return response.json();
 }
 
 // Knowledge Base API
 export async function searchKnowledge(query: string, category?: string): Promise<any> {
-  const url = new URL(`${API_BASE}/api/knowledge/search`);
+  const url = new URL(`${API_BASE}${API_PREFIX}/knowledge/search`);
   url.searchParams.set('query', query);
   if (category) url.searchParams.set('category', category);
   const response = await authFetch(url.toString());
@@ -94,7 +95,7 @@ export async function searchKnowledge(query: string, category?: string): Promise
 }
 
 export async function addKnowledge(title: string, content: string, category: string = 'general'): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/knowledge`, {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/knowledge`, {
     method: 'POST',
     body: JSON.stringify({ title, content, category }),
   });
@@ -103,7 +104,7 @@ export async function addKnowledge(title: string, content: string, category: str
 
 // Workflow API
 export async function listWorkflows(search?: string, tags?: string): Promise<any> {
-  const url = new URL(`${API_BASE}/api/workflows`);
+  const url = new URL(`${API_BASE}${API_PREFIX}/workflows`);
   if (search) url.searchParams.set('search', search);
   if (tags) url.searchParams.set('tags', tags);
   const response = await authFetch(url.toString());
@@ -111,12 +112,12 @@ export async function listWorkflows(search?: string, tags?: string): Promise<any
 }
 
 export async function getWorkflow(id: string): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/workflows/${id}`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/workflows/${id}`);
   return response.json();
 }
 
 export async function createWorkflow(workflow: any): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/workflows`, {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/workflows`, {
     method: 'POST',
     body: JSON.stringify(workflow),
   });
@@ -124,7 +125,7 @@ export async function createWorkflow(workflow: any): Promise<any> {
 }
 
 export async function runWorkflow(id: string, variables: any = {}): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/workflows/${id}/run`, {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/workflows/${id}/run`, {
     method: 'POST',
     body: JSON.stringify(variables),
   });
@@ -132,23 +133,23 @@ export async function runWorkflow(id: string, variables: any = {}): Promise<any>
 }
 
 export async function deleteWorkflow(id: string): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/workflows/${id}`, { method: 'DELETE' });
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/workflows/${id}`, { method: 'DELETE' });
   return response.json();
 }
 
 export async function getWorkflowTemplates(): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/workflows/templates`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/workflows/templates`);
   return response.json();
 }
 
 // Scheduling API
 export async function listScheduledTasks(): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/schedule`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/schedule`);
   return response.json();
 }
 
 export async function scheduleWorkflow(task: any): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/schedule`, {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/schedule`, {
     method: 'POST',
     body: JSON.stringify(task),
   });
@@ -156,28 +157,28 @@ export async function scheduleWorkflow(task: any): Promise<any> {
 }
 
 export async function pauseTask(taskId: string): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/schedule/${taskId}/pause`, { method: 'POST' });
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/schedule/${taskId}/pause`, { method: 'POST' });
   return response.json();
 }
 
 export async function resumeTask(taskId: string): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/schedule/${taskId}/resume`, { method: 'POST' });
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/schedule/${taskId}/resume`, { method: 'POST' });
   return response.json();
 }
 
 export async function cancelTask(taskId: string): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/schedule/${taskId}`, { method: 'DELETE' });
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/schedule/${taskId}`, { method: 'DELETE' });
   return response.json();
 }
 
 // Tools API
 export async function listTools(): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/tools`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/tools`);
   return response.json();
 }
 
 export async function executeTool(toolName: string, params: any): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/tools/${toolName}/execute`, {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/tools/${toolName}/execute`, {
     method: 'POST',
     body: JSON.stringify(params),
   });
@@ -186,12 +187,12 @@ export async function executeTool(toolName: string, params: any): Promise<any> {
 
 // Files API
 export async function listFiles(path: string = '.'): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/files?path=${encodeURIComponent(path)}`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/files?path=${encodeURIComponent(path)}`);
   return response.json();
 }
 
 export async function readFile(path: string): Promise<any> {
-  const response = await authFetch(`${API_BASE}/api/files/read?path=${encodeURIComponent(path)}`);
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/files/read?path=${encodeURIComponent(path)}`);
   return response.json();
 }
 
