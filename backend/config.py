@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import Literal
 import os
@@ -51,7 +51,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default=[
         "http://localhost:3000",
         "https://frontend-tau-two-87.vercel.app",
-        "https://frontend-80mw0q69e-ashutoshs-projects-236a165e.vercel.app"
+        "https://frontend-80mw0q69e-ashutoshs-projects-236a165e.vercel.app",
+        "https://frontend-a1d10ib3h-ashutoshs-projects-236a165e.vercel.app"
     ])
 
     # Authentication Settings
@@ -76,9 +77,12 @@ class Settings(BaseSettings):
     sandbox_timeout: int = Field(default=30)
     sandbox_memory_limit: str = Field(default="256m")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"
+    )
 
 
 settings = Settings()
