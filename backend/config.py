@@ -52,9 +52,9 @@ class Settings(BaseSettings):
     port: int = Field(default=8000)
     cors_origins: list[str] = Field(default=[
         "http://localhost:3000",
-        "https://frontend-tau-two-87.vercel.app",
-        "https://frontend-80mw0q69e-ashutoshs-projects-236a165e.vercel.app",
-        "https://frontend-a1d10ib3h-ashutoshs-projects-236a165e.vercel.app"
+        "https://frontend-a1d10ib3h-ashutoshs-projects-236a165e.vercel.app",
+        "https://frontend-177plfk0b-ashutoshs-projects-236a165e.vercel.app",
+        "https://frontend-gpp8hklwj-ashutoshs-projects-236a165e.vercel.app",
     ])
 
     # Authentication Settings
