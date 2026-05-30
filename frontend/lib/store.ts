@@ -124,6 +124,7 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'ai-agent-storage',
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         isDarkMode: state.isDarkMode,
