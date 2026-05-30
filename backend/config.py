@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     vector_db_path: str = Field(default="./data/vectordb")
     max_memory_items: int = Field(default=1000)
 
+    rag_db_path: str = Field(default="./data/ragdb")
+
     # Workflow Settings
     workflows_path: str = Field(default="./data/workflows")
     max_workflow_steps: int = Field(default=50)
