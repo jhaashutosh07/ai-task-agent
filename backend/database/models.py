@@ -25,14 +25,14 @@ class UserModel(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), default="user")  # "admin" or "user"
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=utc_now)
-    last_login = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    last_login = Column(DateTime(timezone=True), nullable=True)
 
     # Usage tracking
     usage_quota = Column(Integer, default=100000)  # tokens per day
     usage_today = Column(Integer, default=0)
     total_usage = Column(Integer, default=0)
-    usage_reset_date = Column(DateTime, default=utc_now)
+    usage_reset_date = Column(DateTime(timezone=True), default=utc_now)
 
     # Relationships
     api_keys = relationship("APIKeyModel", back_populates="user", cascade="all, delete-orphan")
@@ -48,8 +48,8 @@ class APIKeyModel(Base):
     name = Column(String(100), nullable=False)
     hashed_key = Column(String(255), nullable=False)
     prefix = Column(String(11), nullable=False)  # "sk-" + 8 chars
-    created_at = Column(DateTime, default=utc_now)
-    last_used = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    last_used = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
 
     # Relationships
@@ -67,7 +67,7 @@ class UsageLogModel(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    timestamp = Column(DateTime, default=utc_now)
+    timestamp = Column(DateTime(timezone=True), default=utc_now)
     endpoint = Column(String(255))
     method = Column(String(10))
     tokens_used = Column(Integer, default=0)
@@ -95,8 +95,8 @@ class WorkflowExecutionModel(Base):
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     workflow_id = Column(String(36), nullable=False)
     workflow_name = Column(String(255))
-    started_at = Column(DateTime, default=utc_now)
-    completed_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), default=utc_now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(20), default="running")  # running, completed, failed
     steps_completed = Column(Integer, default=0)
     total_steps = Column(Integer, default=0)
@@ -110,7 +110,7 @@ class AgentActivityModel(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
-    timestamp = Column(DateTime, default=utc_now)
+    timestamp = Column(DateTime(timezone=True), default=utc_now)
     agent_type = Column(String(50))  # orchestrator, researcher, coder, etc.
     action = Column(String(100))  # thinking, tool_call, response, etc.
     tool_name = Column(String(50), nullable=True)
@@ -135,7 +135,7 @@ class ScheduledTaskModel(Base):
     trigger_config = Column(Text, nullable=False)  # JSON string
     variables = Column(Text, nullable=True)  # JSON string
     enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=utc_now)
-    last_run = Column(DateTime, nullable=True)
-    next_run = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    last_run = Column(DateTime(timezone=True), nullable=True)
+    next_run = Column(DateTime(timezone=True), nullable=True)
     run_count = Column(Integer, default=0)
