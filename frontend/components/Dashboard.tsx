@@ -1,194 +1,143 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import {
-  Activity, Brain, Workflow, Clock, Database,
-  Cpu, HardDrive, Zap, TrendingUp
-} from 'lucide-react';
-import { getInfo, getMemoryStats, listScheduledTasks, listWorkflows } from '@/lib/api';
+import { useState, useEffect } from "react";
+import { Activity, Brain, GitBranch, Clock, Database, Cpu, Zap, HardDrive, RefreshCw, ArrowUpRight, FileText } from "lucide-react";
+import { getInfo, getMemoryStats, listScheduledTasks, listWorkflows } from "@/lib/api";
+import { useStore } from "@/lib/store";
 
-interface DashboardStats {
-  tools: string[];
-  agents: string[];
-  workflows: number;
-  scheduledTasks: number;
-  memoryItems: number;
-  knowledgeEntries: number;
+interface Stats { tools: string[]; agents: string[]; workflows: number; tasks: number; memories: number; knowledge: number; }
+
+function StatCard({ title, value, icon, color, sub }: any) {
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800 shadow-card hover:shadow-card-md transition-shadow">
+      <div className={`inline-flex p-2 rounded-xl mb-3 ${color}`}>{icon}</div>
+      <div className="text-2xl font-bold text-zinc-900 dark:text-white">{value}</div>
+      <div className="text-sm font-medium text-zinc-600 dark:text-zinc-300 mt-0.5">{title}</div>
+      {sub && <div className="text-xs text-zinc-400 mt-0.5">{sub}</div>}
+    </div>
+  );
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const { user } = useStore();
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
+  const load = async () => {
     setLoading(true);
     try {
-      const [info, memory, tasks, workflows] = await Promise.all([
-        getInfo(),
-        getMemoryStats(),
-        listScheduledTasks(),
-        listWorkflows()
-      ]);
-
+      const [info, memory, tasks, workflows] = await Promise.all([getInfo(), getMemoryStats(), listScheduledTasks(), listWorkflows()]);
       setStats({
-        tools: info.tools || [],
-        agents: info.agents || [],
+        tools: info.tools || [], agents: info.agents || [],
         workflows: workflows.workflows?.length || 0,
-        scheduledTasks: tasks.tasks?.length || 0,
-        memoryItems: memory.vector_memory?.total_memories || 0,
-        knowledgeEntries: memory.knowledge_base?.total_entries || 0
+        tasks: tasks.tasks?.length || 0,
+        memories: memory.vector_memory?.total_memories || 0,
+        knowledge: memory.knowledge_base?.total_entries || 0,
       });
-    } catch (err) {
-      console.error('Failed to load stats:', err);
-    } finally {
-      setLoading(false);
-    }
+    } catch { } finally { setLoading(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-      </div>
-    );
-  }
+  useEffect(() => { load(); }, []);
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-full min-h-64">
+      <RefreshCw className="w-5 h-5 animate-spin text-primary-500" />
+    </div>
+  );
 
   const statCards = [
-    {
-      title: 'Tools Available',
-      value: stats?.tools.length || 0,
-      icon: <Zap className="w-5 h-5" />,
-      color: 'bg-blue-500/20 text-blue-400'
-    },
-    {
-      title: 'Active Agents',
-      value: stats?.agents.length || 0,
-      icon: <Brain className="w-5 h-5" />,
-      color: 'bg-purple-500/20 text-purple-400'
-    },
-    {
-      title: 'Workflows',
-      value: stats?.workflows || 0,
-      icon: <Workflow className="w-5 h-5" />,
-      color: 'bg-green-500/20 text-green-400'
-    },
-    {
-      title: 'Scheduled Tasks',
-      value: stats?.scheduledTasks || 0,
-      icon: <Clock className="w-5 h-5" />,
-      color: 'bg-orange-500/20 text-orange-400'
-    },
-    {
-      title: 'Memory Items',
-      value: stats?.memoryItems || 0,
-      icon: <Database className="w-5 h-5" />,
-      color: 'bg-cyan-500/20 text-cyan-400'
-    },
-    {
-      title: 'Knowledge Entries',
-      value: stats?.knowledgeEntries || 0,
-      icon: <HardDrive className="w-5 h-5" />,
-      color: 'bg-pink-500/20 text-pink-400'
-    }
+    { title: "Tools", value: stats?.tools.length ?? 0, icon: <Zap className="w-4 h-4" />, color: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400", sub: "Active integrations" },
+    { title: "AI Agents", value: stats?.agents.length ?? 0, icon: <Brain className="w-4 h-4" />, color: "bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400", sub: "Specialized models" },
+    { title: "Workflows", value: stats?.workflows ?? 0, icon: <GitBranch className="w-4 h-4" />, color: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", sub: "Saved automations" },
+    { title: "Scheduled", value: stats?.tasks ?? 0, icon: <Clock className="w-4 h-4" />, color: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400", sub: "Running tasks" },
+    { title: "Memories", value: stats?.memories ?? 0, icon: <Database className="w-4 h-4" />, color: "bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400", sub: "Vector embeddings" },
+    { title: "Knowledge", value: stats?.knowledge ?? 0, icon: <HardDrive className="w-4 h-4" />, color: "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400", sub: "Knowledge base entries" },
   ];
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-white">Dashboard</h2>
-        <button
-          onClick={loadStats}
-          className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300"
-        >
-          Refresh
+    <div className="p-6 space-y-6 max-w-6xl mx-auto animate-fade-in">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">{greeting}{user?.username ? `, ${user.username}` : ""} 👋</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 mt-1 text-sm">Here&apos;s what&apos;s running in your workspace today.</p>
+        </div>
+        <button onClick={load} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white text-sm font-medium shadow-card transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" />Refresh
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {statCards.map((card) => (
-          <div
-            key={card.title}
-            className="bg-gray-800 rounded-xl p-4 border border-gray-700"
-          >
-            <div className={`inline-flex p-2 rounded-lg ${card.color} mb-3`}>
-              {card.icon}
-            </div>
-            <div className="text-2xl font-bold text-white">{card.value}</div>
-            <div className="text-sm text-gray-400">{card.title}</div>
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        {statCards.map(c => <StatCard key={c.title} {...c} />)}
+      </div>
+
+      {/* Two-column section */}
+      <div className="grid md:grid-cols-2 gap-5">
+        {/* Tools */}
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800 shadow-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+              <Zap className="w-4 h-4 text-blue-500" />Available Tools
+            </h3>
+            <span className="text-xs text-zinc-400">{stats?.tools.length} active</span>
           </div>
-        ))}
-      </div>
-
-      {/* Tools Section */}
-      <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Zap className="w-5 h-5 text-blue-400" />
-          Available Tools
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {stats?.tools.map((tool) => (
-            <span
-              key={tool}
-              className="px-3 py-1 bg-gray-700 rounded-full text-sm text-gray-300"
-            >
-              {tool}
-            </span>
-          ))}
+          <div className="flex flex-wrap gap-2">
+            {stats?.tools.map(tool => (
+              <span key={tool} className="px-2.5 py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-600 dark:text-zinc-300 font-medium">
+                {tool.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Agents Section */}
-      <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Brain className="w-5 h-5 text-purple-400" />
-          AI Agents
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {stats?.agents.map((agent) => (
-            <div
-              key={agent}
-              className="p-4 bg-gray-700/50 rounded-lg text-center"
-            >
-              <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                <Cpu className="w-5 h-5 text-purple-400" />
+        {/* Agents */}
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800 shadow-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+              <Brain className="w-4 h-4 text-violet-500" />AI Agents
+            </h3>
+            <span className="text-xs text-zinc-400">{stats?.agents.length} online</span>
+          </div>
+          <div className="space-y-2">
+            {stats?.agents.map(agent => (
+              <div key={agent} className="flex items-center gap-3 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50">
+                <div className="w-7 h-7 bg-violet-100 dark:bg-violet-500/15 rounded-lg flex items-center justify-center">
+                  <Cpu className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 capitalize">{agent}</span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400">Ready</span>
+                </div>
               </div>
-              <div className="text-sm font-medium text-white capitalize">{agent}</div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* System Status */}
-      <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-green-400" />
-          System Status
+      {/* System status */}
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800 shadow-card">
+        <h3 className="font-semibold text-zinc-900 dark:text-white flex items-center gap-2 mb-4">
+          <Activity className="w-4 h-4 text-emerald-500" />System Status
         </h3>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">API Status</span>
-            <span className="flex items-center gap-2 text-green-400">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              Operational
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Multi-Agent System</span>
-            <span className="text-green-400">Active</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Workflow Engine</span>
-            <span className="text-green-400">Ready</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Vector Memory</span>
-            <span className="text-green-400">Connected</span>
-          </div>
+        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "API", status: "Operational" },
+            { label: "Multi-agent system", status: "Active" },
+            { label: "RAG Pipeline", status: "Ready" },
+            { label: "Vector memory", status: "Connected" },
+          ].map(({ label, status }) => (
+            <div key={label} className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50">
+              <span className="text-sm text-zinc-600 dark:text-zinc-300">{label}</span>
+              <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />{status}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
