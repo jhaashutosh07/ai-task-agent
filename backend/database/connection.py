@@ -10,14 +10,23 @@ from auth.models import User, UserInDB, APIKey
 from auth.jwt_handler import verify_api_key
 from config import settings
 
-# Ensure data directory exists
-data_dir = Path(settings.auth_db_path).parent
-data_dir.mkdir(parents=True, exist_ok=True)
+# Build database URL — prefers DATABASE_URL env var (PostgreSQL on Neon/Render),
+# falls back to local SQLite for development
+_db_url = os.environ.get("DATABASE_URL", "")
+if _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Create async engine
-DATABASE_URL = f"sqlite+aiosqlite:///{settings.auth_db_path}"
+if _db_url:
+    DATABASE_URL = _db_url
+else:
+    # SQLite fallback for local dev
+    data_dir = Path(settings.auth_db_path).parent
+    data_dir.mkdir(parents=True, exist_ok=True)
+    DATABASE_URL = f"sqlite+aiosqlite:///{settings.auth_db_path}"
+
 engine = create_async_engine(DATABASE_URL, echo=False)
-
 # Create async session factory
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
