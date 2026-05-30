@@ -68,7 +68,8 @@ components = {
     "knowledge_base": None,
     "workflow_engine": None,
     "workflow_manager": None,
-    "scheduler": None,`n    "rag_pipeline": None,
+    "scheduler": None,
+    "rag_pipeline": None,
     "conversation_memory": None
 }
 
