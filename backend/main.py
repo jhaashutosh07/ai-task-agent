@@ -26,6 +26,7 @@ from agents import (
     PlannerAgent, SummarizerAgent
 )
 from memory import VectorMemory, ConversationMemory, KnowledgeBase
+from rag import RAGPipeline
 from workflows import WorkflowEngine, WorkflowManager, WorkflowScheduler
 from api.routes import router, set_components
 from api.websocket import websocket_endpoint
@@ -67,7 +68,7 @@ components = {
     "knowledge_base": None,
     "workflow_engine": None,
     "workflow_manager": None,
-    "scheduler": None,
+    "scheduler": None,`n    "rag_pipeline": None,
     "conversation_memory": None
 }
 
@@ -190,6 +191,11 @@ def initialize_workflows():
     print("Initialized workflow system")
 
 
+
+def initialize_rag():
+    components["rag_pipeline"] = RAGPipeline(settings.rag_db_path)
+    print("Initialized RAG pipeline")
+
 async def initialize_all():
     print("\n" + "=" * 50)
     print("Initializing AI Task Automation Agent v2.0")
@@ -204,6 +210,7 @@ async def initialize_all():
     initialize_memory()
     initialize_workflows()
 
+    initialize_rag()
     set_components(components)
 
     print("\n" + "=" * 50)
