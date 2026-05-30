@@ -32,8 +32,9 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 
 async def init_db():
-    """Initialize the database, create tables if they don't exist"""
+    """Initialize the database — drop and recreate tables to apply schema changes."""
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     print("Database initialized")
 
