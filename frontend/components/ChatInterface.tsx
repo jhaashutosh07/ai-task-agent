@@ -1,323 +1,172 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { Send, Trash2, Settings as SettingsIcon, FolderOpen, Loader2, Image, X } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { sendMessage, clearChat } from '@/lib/api';
-import MessageBubble from './MessageBubble';
-import TaskProgress from './TaskProgress';
-import VoiceInput from './VoiceInput';
-import VoiceOutput from './VoiceOutput';
+import { useState, useRef, useEffect } from "react";
+import { Send, Trash2, Loader2, Sparkles, User, ArrowDown } from "lucide-react";
+import { useStore } from "@/lib/store";
+import { sendMessage, clearChat } from "@/lib/api";
+import MessageBubble from "./MessageBubble";
+import TaskProgress from "./TaskProgress";
+import VoiceInput from "./VoiceInput";
+
+const SUGGESTIONS = [
+  "Search for the latest AI research papers",
+  "Write a Python script to parse a CSV",
+  "Summarize a topic and save it to a file",
+  "What can you help me with?",
+];
 
 export default function ChatInterface() {
-  const [input, setInput] = useState('');
-  const [images, setImages] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState("");
+  const [showScroll, setShowScroll] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const {
-    messages,
-    addMessage,
-    clearMessages,
-    isLoading,
-    setLoading,
-    currentEvents,
-    addEvent,
-    clearEvents,
-    toggleSettings,
-    toggleFiles,
-  } = useStore();
+  const { messages, addMessage, clearMessages, isLoading, setLoading, currentEvents, addEvent, clearEvents } = useStore();
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentEvents]);
+  const scrollToBottom = () => bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 
-  // Handle image file selection
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const validFiles = files.filter((file) => file.type.startsWith('image/'));
+  useEffect(() => { scrollToBottom(); }, [messages, currentEvents]);
 
-    if (validFiles.length > 0) {
-      setImages((prev) => [...prev, ...validFiles].slice(0, 4)); // Max 4 images
-
-      // Create previews
-      validFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviews((prev) => [...prev, e.target?.result as string].slice(0, 4));
-        };
-        reader.readAsDataURL(file);
-      });
-    }
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowScroll(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
   };
 
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleVoiceTranscript = (text: string) => {
-    setInput((prev) => (prev ? `${prev} ${text}` : text));
-  };
+  const handleVoiceTranscript = (text: string) => setInput(p => p ? `${p} ${text}` : text);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
-
-    const userMessage = input.trim();
-    setInput('');
-    setImages([]);
-    setImagePreviews([]);
+    const msg = input.trim();
+    setInput("");
     clearEvents();
-
-    // Add user message with images if any
-    addMessage({
-      role: 'user',
-      content: userMessage,
-      images: imagePreviews.length > 0 ? imagePreviews : undefined,
-    });
+    addMessage({ role: "user", content: msg });
     setLoading(true);
-
     try {
-      // Send to backend (TODO: Add image support to API)
-      const response = await sendMessage(userMessage);
-
-      // Add events
-      response.events.forEach((event) => addEvent(event));
-
-      // Add assistant response
-      addMessage({
-        role: 'assistant',
-        content: response.response,
-        events: response.events,
-      });
-    } catch (error) {
-      addMessage({
-        role: 'assistant',
-        content: `Error: ${error instanceof Error ? error.message : 'Something went wrong'}`,
-      });
-    } finally {
-      setLoading(false);
-      clearEvents();
-    }
+      const res = await sendMessage(msg);
+      res.events.forEach(addEvent);
+      addMessage({ role: "assistant", content: res.response, events: res.events });
+    } catch (err) {
+      addMessage({ role: "assistant", content: `Sorry, something went wrong: ${err instanceof Error ? err.message : "Unknown error"}` });
+    } finally { setLoading(false); clearEvents(); }
   };
 
   const handleClear = async () => {
-    try {
-      await clearChat();
-      clearMessages();
-      clearEvents();
-    } catch (error) {
-      console.error('Failed to clear chat:', error);
-    }
+    try { await clearChat(); } catch {}
+    clearMessages(); clearEvents();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
-  };
-
-  // Handle drag and drop
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files).filter((file) =>
-      file.type.startsWith('image/')
-    );
-
-    if (files.length > 0) {
-      setImages((prev) => [...prev, ...files].slice(0, 4));
-      files.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviews((prev) => [...prev, e.target?.result as string].slice(0, 4));
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  const onKey = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } };
 
   return (
-    <div
-      className="flex flex-col h-full"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-    >
+    <div className="flex flex-col h-full bg-zinc-50 dark:bg-zinc-950">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-        <div>
-          <h1 className="text-xl font-semibold text-white">AI Task Agent</h1>
-          <p className="text-sm text-gray-400">
-            Your autonomous task automation assistant
-          </p>
+      <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-5 py-3.5 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-violet-600 rounded-xl flex items-center justify-center shadow-glow">
+            <Sparkles className="w-4.5 h-4.5 text-white" />
+          </div>
+          <div>
+            <h1 className="font-semibold text-zinc-900 dark:text-white text-sm">Nexus AI</h1>
+            <p className="text-xs text-zinc-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />
+              {isLoading ? "Thinking…" : "Ready to help"}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={toggleFiles}
-            className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
-            title="Toggle file explorer"
-          >
-            <FolderOpen className="w-5 h-5 text-gray-400" />
-          </button>
-          <button
-            onClick={toggleSettings}
-            className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
-            title="Settings"
-          >
-            <SettingsIcon className="w-5 h-5 text-gray-400" />
-          </button>
-          <button
-            onClick={handleClear}
-            className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
-            title="Clear chat"
-          >
-            <Trash2 className="w-5 h-5 text-gray-400" />
-          </button>
-        </div>
+        <button onClick={handleClear} title="Clear conversation"
+          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
+          <Trash2 className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
         {messages.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Send className="w-8 h-8 text-blue-400" />
+          <div className="flex flex-col items-center justify-center h-full text-center py-16 animate-fade-in">
+            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-violet-600 rounded-2xl flex items-center justify-center mb-5 shadow-glow">
+              <Sparkles className="w-7 h-7 text-white" />
             </div>
-            <h2 className="text-xl font-medium text-white mb-2">
-              Welcome to AI Task Agent
-            </h2>
-            <p className="text-gray-400 max-w-md mx-auto">
-              I can help you with complex tasks by searching the web, running code,
-              and managing files. Try asking me to:
+            <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">What shall we work on?</h2>
+            <p className="text-zinc-500 dark:text-zinc-400 text-sm max-w-xs leading-relaxed mb-6">
+              I can search the web, run code, manage files, and coordinate multiple AI agents to get things done.
             </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {[
-                'Search for Python tutorials',
-                'Write a script to process data',
-                'Create a file with some content',
-                'Find the latest news on AI',
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => setInput(suggestion)}
-                  className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-full text-sm text-gray-300 transition-colors"
-                >
-                  {suggestion}
+            <div className="flex flex-wrap gap-2 justify-center max-w-md">
+              {SUGGESTIONS.map(s => (
+                <button key={s} onClick={() => setInput(s)}
+                  className="px-3.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm text-zinc-600 dark:text-zinc-300 hover:border-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors shadow-card">
+                  {s}
                 </button>
               ))}
             </div>
           </div>
         ) : (
           <>
-            {messages.map((message) => (
-              <div key={message.id}>
-                <MessageBubble message={message} />
-                {message.role === 'assistant' && message.content && (
-                  <div className="mt-1 ml-12">
-                    <VoiceOutput text={message.content} />
+            {messages.map(m => (
+              <div key={m.id} className={`flex gap-3 animate-slide-up ${m.role === "user" ? "flex-row-reverse" : ""}`}>
+                {/* Avatar */}
+                <div className={`flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${
+                  m.role === "user"
+                    ? "bg-primary-100 dark:bg-primary-500/15"
+                    : "bg-gradient-to-br from-primary-500 to-violet-600 shadow-glow"
+                }`}>
+                  {m.role === "user"
+                    ? <User className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                    : <Sparkles className="w-4 h-4 text-white" />}
+                </div>
+                <div className={`max-w-[78%] ${m.role === "user" ? "items-end" : "items-start"} flex flex-col gap-1`}>
+                  <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                    m.role === "user"
+                      ? "bg-primary-600 text-white rounded-tr-sm"
+                      : "bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-800 shadow-card rounded-tl-sm prose dark:prose-invert max-w-none"
+                  }`}>
+                    <MessageBubble message={m} />
                   </div>
-                )}
+                </div>
               </div>
             ))}
-          </>
-        )}
-
-        {/* Loading indicator with events */}
-        {isLoading && (
-          <div className="space-y-4">
-            <TaskProgress events={currentEvents} />
-            {currentEvents.length === 0 && (
-              <div className="flex items-center gap-2 text-gray-400">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Thinking...</span>
+            {isLoading && (
+              <div className="flex gap-3 animate-slide-up">
+                <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-violet-600 flex items-center justify-center shadow-glow">
+                  <Sparkles className="w-4 h-4 text-white animate-spin-slow" />
+                </div>
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl rounded-tl-sm shadow-card p-4 max-w-[78%]">
+                  {currentEvents.length > 0 ? <TaskProgress events={currentEvents} /> : (
+                    <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin" />Thinking…
+                    </div>
+                  )}
+                </div>
               </div>
             )}
-          </div>
+          </>
         )}
-
-        <div ref={messagesEndRef} />
+        <div ref={bottomRef} />
       </div>
 
-      {/* Image Previews */}
-      {imagePreviews.length > 0 && (
-        <div className="px-4 py-2 border-t border-gray-700 flex gap-2 overflow-x-auto">
-          {imagePreviews.map((preview, index) => (
-            <div key={index} className="relative flex-shrink-0">
-              <img
-                src={preview}
-                alt={`Upload ${index + 1}`}
-                className="w-20 h-20 object-cover rounded-lg border border-gray-600"
-              />
-              <button
-                onClick={() => removeImage(index)}
-                className="absolute -top-2 -right-2 p-1 bg-red-600 rounded-full hover:bg-red-700 transition-colors"
-              >
-                <X className="w-3 h-3 text-white" />
-              </button>
-            </div>
-          ))}
-        </div>
+      {/* Scroll to bottom */}
+      {showScroll && (
+        <button onClick={scrollToBottom}
+          className="absolute bottom-24 right-6 w-8 h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full flex items-center justify-center shadow-card-md text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all">
+          <ArrowDown className="w-4 h-4" />
+        </button>
       )}
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-700">
-        <form onSubmit={handleSubmit} className="flex gap-3">
-          {/* Image upload button */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors"
-            title="Upload image"
-          >
-            <Image className="w-5 h-5 text-gray-400" />
-          </button>
-
-          {/* Voice input */}
-          <VoiceInput
-            onTranscript={handleVoiceTranscript}
-            disabled={isLoading}
-            className="p-3 rounded-xl"
-          />
-
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask me to do something..."
-            rows={1}
-            className="flex-1 px-4 py-3 bg-gray-800 border border-gray-600 rounded-xl text-white placeholder-gray-500 resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            className="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
-          >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
+      <div className="bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 p-4 flex-shrink-0">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 px-3 py-2 focus-within:border-primary-400 dark:focus-within:border-primary-500 transition-colors shadow-card">
+          <VoiceInput onTranscript={handleVoiceTranscript} disabled={isLoading} className="p-2 rounded-xl flex-shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" />
+          <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={onKey}
+            placeholder="Message Nexus AI…" rows={1}
+            className="flex-1 bg-transparent resize-none text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none py-1.5 max-h-36 leading-relaxed" />
+          <button type="submit" disabled={!input.trim() || isLoading}
+            className="p-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all flex-shrink-0">
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </form>
-        <p className="text-xs text-gray-500 mt-2 text-center">
-          Press Enter to send, Shift+Enter for new line. Drag & drop images or use the mic button.
-        </p>
+        <p className="text-center text-xs text-zinc-400 mt-2">Enter to send · Shift+Enter for new line</p>
       </div>
     </div>
   );
