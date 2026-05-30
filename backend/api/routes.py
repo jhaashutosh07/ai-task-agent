@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Literal, List, Dict, Any, Optional
 from datetime import datetime
@@ -25,6 +25,11 @@ class ChatResponse(BaseModel):
     events: List[Dict[str, Any]] = []
     execution_time: float = 0.0
 
+
+
+class RAGQueryRequest(BaseModel):
+    query: str
+    n_results: int = 5
 
 class WorkflowCreateRequest(BaseModel):
     name: str
@@ -94,7 +99,14 @@ async def chat(request: ChatRequest):
     orchestrator.add_event_handler(on_event)
 
     try:
-        result = await orchestrator.execute(request.message)
+        # Inject RAG context if documents are available
+        augmented = request.message
+        rag = _components.get("rag_pipeline")
+        if rag:
+            ctx = await rag.build_context(request.message)
+            if ctx:
+                augmented = f"{ctx}\n\nUser question: {request.message}"
+        result = await orchestrator.execute(augmented)
 
         execution_time = (datetime.now() - start_time).total_seconds()
 
@@ -618,3 +630,65 @@ async def get_agent_activity(limit: int = 100):
             for r in records
         ]
     }
+
+# ─── RAG Endpoints ────────────────────────────────────────────────────────────
+
+@router.post("/rag/ingest")
+async def ingest_document(file: UploadFile = File(...)):
+    """Upload a document (PDF, TXT, MD) and store it in the RAG vector DB."""
+    rag = _components.get("rag_pipeline")
+    if not rag:
+        raise HTTPException(status_code=500, detail="RAG pipeline not initialized")
+    allowed = {".pdf", ".txt", ".md", ".html"}
+    from pathlib import Path as _P
+    if _P(file.filename).suffix.lower() not in allowed:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type. Allowed: {allowed}")
+    content = await file.read()
+    try:
+        result = await rag.ingest(content, file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return result
+
+
+@router.get("/rag/documents")
+async def list_rag_documents():
+    rag = _components.get("rag_pipeline")
+    if not rag:
+        return {"documents": []}
+    return {"documents": rag.list_documents()}
+
+
+@router.delete("/rag/documents/{doc_id}")
+async def delete_rag_document(doc_id: str):
+    rag = _components.get("rag_pipeline")
+    if not rag:
+        raise HTTPException(status_code=500, detail="RAG pipeline not initialized")
+    ok = await rag.delete_document(doc_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"status": "deleted", "doc_id": doc_id}
+
+
+@router.post("/rag/query")
+async def query_rag(request: RAGQueryRequest):
+    rag = _components.get("rag_pipeline")
+    if not rag:
+        raise HTTPException(status_code=500, detail="RAG pipeline not initialized")
+    chunks = await rag.query(request.query, n_results=request.n_results)
+    return {
+        "query": request.query,
+        "results": [
+            {"id": c.id, "content": c.content, "score": round(c.score, 4),
+             "filename": c.metadata.get("filename"), "chunk_index": c.metadata.get("chunk_index")}
+            for c in chunks
+        ]
+    }
+
+
+@router.get("/rag/stats")
+async def get_rag_stats():
+    rag = _components.get("rag_pipeline")
+    if not rag:
+        return {"documents": 0, "total_chunks": 0, "storage": "unavailable"}
+    return rag.get_stats()
