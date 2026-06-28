@@ -49,7 +49,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=r"https://.*-ashutoshs-projects-236a165e\.vercel\.app",
+    # Allow this project's Vercel domains: both the project-scoped hash URLs
+    # (…-ashutoshs-projects-236a165e.vercel.app) and the clean stable aliases
+    # (frontend-*.vercel.app, e.g. frontend-tau-two-87.vercel.app).
+    allow_origin_regex=r"https://(frontend-.*|.*-ashutoshs-projects-236a165e)\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
