@@ -110,21 +110,53 @@ async def chat(request: ChatRequest):
 
         execution_time = (datetime.now() - start_time).total_seconds()
 
+        # Determine the response text, surfacing provider/agent errors clearly
+        output = (result.output or "").strip()
+        if not output:
+            output = _friendly_error_message(getattr(result, "error", None), events)
+
         # Store in memory
         vector_memory = _components.get("vector_memory")
-        if vector_memory:
+        if vector_memory and result.output:
             await vector_memory.add(
                 content=f"Task: {request.message}\nResult: {result.output[:500]}",
                 memory_type="conversation"
             )
 
         return ChatResponse(
-            response=result.output,
+            response=output,
             events=events,
             execution_time=execution_time
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _friendly_error_message(error: Optional[str], events: List[Dict[str, Any]]) -> str:
+    """Turn raw provider/agent errors into a clear, user-facing message."""
+    # Fall back to the last error event if no explicit error was returned
+    raw = error or ""
+    if not raw:
+        for ev in reversed(events):
+            if ev.get("type", "").endswith("_error"):
+                raw = str(ev.get("data", {}).get("error", ""))
+                break
+
+    low = raw.lower()
+    if "credit balance is too low" in low or "billing" in low:
+        return (
+            "⚠️ **The AI provider account is out of credits.**\n\n"
+            "The request reached the model provider, but the account has no remaining "
+            "balance. Please add credits (or switch `LLM_PROVIDER` to another configured "
+            "provider) and try again."
+        )
+    if "rate limit" in low or "429" in low:
+        return "⚠️ The AI provider is rate-limiting requests right now. Please wait a moment and try again."
+    if "authentication" in low or "invalid x-api-key" in low or "401" in low or "api key" in low:
+        return "⚠️ The AI provider rejected the API key. Please check the provider credentials in the backend configuration."
+    if raw:
+        return f"⚠️ The request could not be completed: {raw}"
+    return "⚠️ The agent could not produce a response. Please try rephrasing your request."
 
 
 @router.post("/chat/clear")
