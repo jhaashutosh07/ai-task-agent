@@ -7,10 +7,40 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const PREFIX = "/api/v1";
 const auth = () => ({ Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("access_token") || "" : ""}` });
 
-async function listDocs() { const r = await fetch(`${API}${PREFIX}/rag/documents`, { headers: auth() }); return r.json(); }
-async function deleteDocs(id: string) { await fetch(`${API}${PREFIX}/rag/documents/${id}`, { method: "DELETE", headers: auth() }); }
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The backend runs on a free tier that spins down when idle. The first request
+// after a while can return 502/503 (or time out) while it wakes up — so we retry
+// transient failures with backoff instead of surfacing a scary error.
+async function resilientFetch(url: string, opts: RequestInit, retries = 5, onWake?: () => void): Promise<Response> {
+  let lastErr: any;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const r = await fetch(url, opts);
+      if ([502, 503, 504].includes(r.status) && i < retries) {
+        onWake?.();
+        await sleep(4000 + i * 2000);
+        continue;
+      }
+      return r;
+    } catch (e) {
+      lastErr = e;
+      if (i < retries) { onWake?.(); await sleep(4000 + i * 2000); continue; }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
+async function errorText(r: Response): Promise<string> {
+  try { const j = await r.json(); return j.detail || `HTTP ${r.status}`; }
+  catch { return `Server error (HTTP ${r.status}). It may still be starting — please try again.`; }
+}
+
+async function listDocs() { const r = await resilientFetch(`${API}${PREFIX}/rag/documents`, { headers: auth() }); return r.json(); }
+async function deleteDocs(id: string) { await resilientFetch(`${API}${PREFIX}/rag/documents/${id}`, { method: "DELETE", headers: auth() }); }
 async function queryRag(query: string) {
-  const r = await fetch(`${API}${PREFIX}/rag/query`, { method: "POST", headers: { ...auth(), "Content-Type": "application/json" }, body: JSON.stringify({ query, n_results: 5 }) });
+  const r = await resilientFetch(`${API}${PREFIX}/rag/query`, { method: "POST", headers: { ...auth(), "Content-Type": "application/json" }, body: JSON.stringify({ query, n_results: 5 }) });
   return r.json();
 }
 
@@ -29,6 +59,7 @@ export default function DocumentsPage() {
   const [results, setResults] = useState<Chunk[]>([]);
   const [query, setQuery] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [waking, setWaking] = useState(false);
   const [searching, setSearching] = useState(false);
   const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -43,13 +74,24 @@ export default function DocumentsPage() {
     if (!files || files.length === 0) return;
     setUploading(true);
     let ok = 0, fail = 0;
+    let wokeNotified = false;
+    const notifyWake = () => {
+      if (!wokeNotified) { wokeNotified = true; setWaking(true); }
+    };
     for (const file of Array.from(files)) {
       const fd = new FormData(); fd.append("file", file);
       try {
-        const r = await fetch(`${API}${PREFIX}/rag/ingest`, { method: "POST", headers: auth(), body: fd });
-        if (r.ok) ok++; else { const e = await r.json(); throw new Error(e.detail); }
-      } catch (e: any) { fail++; showToast("err", `Failed: ${file.name} — ${e.message}`); }
+        const r = await resilientFetch(`${API}${PREFIX}/rag/ingest`, { method: "POST", headers: auth(), body: fd }, 5, notifyWake);
+        if (r.ok) ok++; else { fail++; showToast("err", `Failed: ${file.name} — ${await errorText(r)}`); }
+      } catch (e: any) {
+        fail++;
+        const msg = e?.message === "Failed to fetch"
+          ? "Could not reach the server. Check your connection and try again."
+          : (e?.message || "Upload failed");
+        showToast("err", `Failed: ${file.name} — ${msg}`);
+      }
     }
+    setWaking(false);
     if (ok > 0) showToast("ok", `${ok} document${ok > 1 ? "s" : ""} ingested successfully`);
     await reload();
     setUploading(false);
@@ -101,7 +143,15 @@ export default function DocumentsPage() {
         {uploading ? (
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-            <p className="text-sm font-medium text-primary-600 dark:text-primary-400">Processing documents…</p>
+            <p className="text-sm font-medium text-primary-600 dark:text-primary-400">
+              {waking ? "Waking up the server…" : "Processing documents…"}
+            </p>
+            {waking && (
+              <p className="text-xs text-zinc-400 max-w-xs">
+                The free-tier backend was asleep. This first request can take up to a
+                minute — hang tight, it'll finish automatically.
+              </p>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
