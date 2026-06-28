@@ -2,16 +2,38 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { User, Sparkles, ChevronDown, Wrench, Check, X } from "lucide-react";
-import { Message, AgentEvent } from "@/lib/types";
+import {
+  User, Sparkles, ChevronDown, Wrench, Check, X,
+  Zap, FileText, RefreshCw,
+} from "lucide-react";
+import { Message, AgentEvent, Citation, ChatMeta } from "@/lib/types";
 import CodeBlock from "./CodeBlock";
+
+// Map raw orchestrator/agent event types to readable step labels.
+function stepLabel(e: AgentEvent): string | null {
+  const t = e.type || "";
+  const d = e.data || {};
+  switch (t) {
+    case "orchestrator_start": return "Analysing your request";
+    case "decomposing": return "Planning subtasks";
+    case "task_decomposed": return "Plan ready";
+    case "subtask_start": return `${e.agent || "agent"}: ${d.description || ""}`.trim();
+    case "subtask_complete": return `${e.agent || "agent"} finished`;
+    case "synthesizing": return "Synthesising the answer";
+    case "orchestrator_complete": return "Done";
+    case "tool_call": return `Tool: ${d.tool || ""}`;
+    case "tool_result": return `Tool result${d.tool ? `: ${d.tool}` : ""}`;
+    default:
+      if (t.endsWith("_error")) return `Error: ${d.error || ""}`.slice(0, 80);
+      return null;
+  }
+}
 
 function AgentActivity({ events }: { events: AgentEvent[] }) {
   const [open, setOpen] = useState(false);
-  // Keep only meaningful agent/tool steps for a readable trail.
-  const steps = events.filter(
-    (e) => e.type === "tool_call" || e.type === "tool_result" || e.type === "agent_start" || e.type === "agent_delegate"
-  );
+  const steps = events
+    .map((e) => ({ e, label: stepLabel(e) }))
+    .filter((s) => s.label);
   if (steps.length === 0) return null;
 
   return (
@@ -26,15 +48,15 @@ function AgentActivity({ events }: { events: AgentEvent[] }) {
       </button>
       {open && (
         <div className="mt-2 space-y-1.5 border-l-2 border-zinc-200 dark:border-zinc-700 pl-3 animate-slide-up">
-          {steps.map((e, i) => {
-            const label = e.data.tool || e.agent || e.data.description || e.type;
-            const ok = e.data.success;
+          {steps.map(({ e, label }, i) => {
+            const ok = e.data?.success;
+            const isErr = (e.type || "").endsWith("_error");
             return (
               <div key={i} className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                {ok === true && <Check className="w-3 h-3 text-emerald-500 flex-shrink-0" />}
-                {ok === false && <X className="w-3 h-3 text-rose-500 flex-shrink-0" />}
-                {ok === undefined && <span className="w-1.5 h-1.5 rounded-full bg-primary-400 flex-shrink-0" />}
-                <span className="font-mono truncate">{label}</span>
+                {isErr ? <X className="w-3 h-3 text-rose-500 flex-shrink-0" />
+                  : ok === true ? <Check className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+                  : <span className="w-1.5 h-1.5 rounded-full bg-primary-400 flex-shrink-0" />}
+                <span className="truncate">{label}</span>
               </div>
             );
           })}
@@ -44,10 +66,64 @@ function AgentActivity({ events }: { events: AgentEvent[] }) {
   );
 }
 
+function Sources({ citations }: { citations: Citation[] }) {
+  const [open, setOpen] = useState(false);
+  if (!citations || citations.length === 0) return null;
+  return (
+    <div className="mt-2 w-full">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-xs font-medium text-primary-500 hover:text-primary-600 transition-colors"
+      >
+        <FileText className="w-3.5 h-3.5" />
+        {citations.length} source{citations.length > 1 ? "s" : ""}
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 animate-slide-up">
+          {citations.map((c) => (
+            <div key={c.n} className="text-xs bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-medium text-zinc-600 dark:text-zinc-300">
+                  [{c.n}] {c.filename}
+                </span>
+                <span className="text-zinc-400">{(c.score * 100).toFixed(0)}%</span>
+              </div>
+              <p className="text-zinc-500 dark:text-zinc-400 leading-relaxed">{c.snippet}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetaBadges({ meta }: { meta?: ChatMeta }) {
+  if (!meta) return null;
+  const badges: { icon: any; label: string; cls: string }[] = [];
+  if (meta.cache_hit)
+    badges.push({ icon: Zap, label: "cached", cls: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10" });
+  if (meta.intent && meta.intent !== "cache")
+    badges.push({ icon: Sparkles, label: meta.intent, cls: "text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10" });
+  if (meta.reflected)
+    badges.push({ icon: RefreshCw, label: "refined", cls: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10" });
+  if (badges.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+      {badges.map((b, i) => (
+        <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md ${b.cls}`}>
+          <b.icon className="w-2.5 h-2.5" />{b.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const content = message.content || "";
   const events = message.events || [];
+  const citations = message.citations || [];
   const time = (() => {
     try { return new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
     catch { return ""; }
@@ -92,11 +168,13 @@ export default function MessageBubble({ message }: { message: Message }) {
                   },
                 }}
               >
-                {content}
+                {content || "…"}
               </ReactMarkdown>
             </div>
           )}
         </div>
+        {!isUser && <MetaBadges meta={message.meta} />}
+        {!isUser && citations.length > 0 && <Sources citations={citations} />}
         {!isUser && events.length > 0 && <AgentActivity events={events} />}
         {time && <span className="text-xs text-zinc-400 px-1">{time}</span>}
       </div>

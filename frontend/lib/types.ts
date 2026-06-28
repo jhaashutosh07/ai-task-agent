@@ -5,6 +5,26 @@ export interface Message {
   timestamp: Date;
   events?: AgentEvent[];
   images?: string[];
+  citations?: Citation[];
+  meta?: ChatMeta;
+}
+
+export interface Citation {
+  n: number;
+  filename: string;
+  chunk_index?: number;
+  score: number;
+  snippet: string;
+}
+
+export interface ChatMeta {
+  cache_hit?: boolean;
+  similarity?: number;
+  intent?: string;
+  reflected?: boolean;
+  used_rag?: boolean;
+  trace_id?: string;
+  latency_ms?: number;
 }
 
 export interface AgentEvent {

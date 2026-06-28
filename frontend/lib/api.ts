@@ -49,6 +49,79 @@ export async function clearChat(): Promise<void> {
   await authFetch(`${API_BASE}${API_PREFIX}/chat/clear`, { method: 'POST' });
 }
 
+// Streaming chat over Server-Sent Events.
+export interface StreamHandlers {
+  onMeta?: (meta: any) => void;
+  onStage?: (stage: { name: string; [k: string]: any }) => void;
+  onStep?: (step: any) => void;
+  onToken?: (text: string) => void;
+  onCitations?: (citations: any[]) => void;
+  onDone?: (data: { response: string; citations: any[]; latency_ms: number }) => void;
+  onError?: (message: string) => void;
+}
+
+export async function streamChat(
+  message: string,
+  handlers: StreamHandlers,
+  signal?: AbortSignal
+): Promise<void> {
+  const token = getAccessToken();
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${API_PREFIX}/chat/stream`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message }),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    let detail = 'Failed to start stream';
+    try { detail = (await res.json()).detail || detail; } catch {}
+    handlers.onError?.(detail);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const dispatch = (block: string) => {
+    let event = 'message';
+    const dataLines: string[] = [];
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+    if (dataLines.length === 0) return;
+    let payload: any = {};
+    try { payload = JSON.parse(dataLines.join('\n')); } catch { return; }
+    switch (event) {
+      case 'meta': handlers.onMeta?.(payload); break;
+      case 'stage': handlers.onStage?.(payload); break;
+      case 'step': handlers.onStep?.(payload); break;
+      case 'token': handlers.onToken?.(payload.text || ''); break;
+      case 'citations': handlers.onCitations?.(payload.citations || []); break;
+      case 'done': handlers.onDone?.(payload); break;
+      case 'error': handlers.onError?.(payload.message || 'Stream error'); break;
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      if (block.trim()) dispatch(block);
+    }
+  }
+  if (buffer.trim()) dispatch(buffer);
+}
+
 export async function getHistory(): Promise<{ history: any[] }> {
   const response = await authFetch(`${API_BASE}${API_PREFIX}/chat/history`);
   return response.json();
