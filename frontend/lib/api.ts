@@ -196,6 +196,51 @@ export async function readFile(path: string): Promise<any> {
   return response.json();
 }
 
+// RAG (Retrieval-Augmented Generation) API
+export async function getRagStats(): Promise<{ documents: number; total_chunks: number; storage?: string }> {
+  try {
+    const response = await authFetch(`${API_BASE}${API_PREFIX}/rag/stats`);
+    if (!response.ok) return { documents: 0, total_chunks: 0 };
+    return response.json();
+  } catch {
+    return { documents: 0, total_chunks: 0 };
+  }
+}
+
+export async function listRagDocuments(): Promise<{ documents: any[] }> {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/rag/documents`);
+  return response.json();
+}
+
+export async function ingestDocument(file: File): Promise<any> {
+  const form = new FormData();
+  form.append('file', file);
+  // Note: do NOT set Content-Type — the browser sets the multipart boundary.
+  const token = getAccessToken();
+  const headers: HeadersInit = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(`${API_BASE}${API_PREFIX}/rag/ingest`, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  if (!response.ok) throw new Error((await response.json()).detail || 'Failed to ingest document');
+  return response.json();
+}
+
+export async function deleteRagDocument(docId: string): Promise<any> {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/rag/documents/${docId}`, { method: 'DELETE' });
+  return response.json();
+}
+
+export async function queryRag(query: string, nResults: number = 5): Promise<any> {
+  const response = await authFetch(`${API_BASE}${API_PREFIX}/rag/query`, {
+    method: 'POST',
+    body: JSON.stringify({ query, n_results: nResults }),
+  });
+  return response.json();
+}
+
 // Health Check (no auth needed)
 export async function checkHealth(): Promise<boolean> {
   try {

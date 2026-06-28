@@ -1,13 +1,53 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { User, Sparkles } from "lucide-react";
-import { Message } from "@/lib/types";
+import { User, Sparkles, ChevronDown, Wrench, Check, X } from "lucide-react";
+import { Message, AgentEvent } from "@/lib/types";
 import CodeBlock from "./CodeBlock";
+
+function AgentActivity({ events }: { events: AgentEvent[] }) {
+  const [open, setOpen] = useState(false);
+  // Keep only meaningful agent/tool steps for a readable trail.
+  const steps = events.filter(
+    (e) => e.type === "tool_call" || e.type === "tool_result" || e.type === "agent_start" || e.type === "agent_delegate"
+  );
+  if (steps.length === 0) return null;
+
+  return (
+    <div className="mt-2 w-full">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+      >
+        <Wrench className="w-3.5 h-3.5" />
+        {steps.length} agent step{steps.length > 1 ? "s" : ""}
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1.5 border-l-2 border-zinc-200 dark:border-zinc-700 pl-3 animate-slide-up">
+          {steps.map((e, i) => {
+            const label = e.data.tool || e.agent || e.data.description || e.type;
+            const ok = e.data.success;
+            return (
+              <div key={i} className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                {ok === true && <Check className="w-3 h-3 text-emerald-500 flex-shrink-0" />}
+                {ok === false && <X className="w-3 h-3 text-rose-500 flex-shrink-0" />}
+                {ok === undefined && <span className="w-1.5 h-1.5 rounded-full bg-primary-400 flex-shrink-0" />}
+                <span className="font-mono truncate">{label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const content = message.content || "";
+  const events = message.events || [];
   const time = (() => {
     try { return new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
     catch { return ""; }
@@ -57,6 +97,7 @@ export default function MessageBubble({ message }: { message: Message }) {
             </div>
           )}
         </div>
+        {!isUser && events.length > 0 && <AgentActivity events={events} />}
         {time && <span className="text-xs text-zinc-400 px-1">{time}</span>}
       </div>
     </div>
