@@ -13,6 +13,7 @@ weight is added. Similarity search is done in NumPy over the stored vectors —
 more than adequate for the document volumes of a demo/portfolio deployment.
 """
 import json
+import os
 import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
@@ -63,13 +64,24 @@ class PgRagStore:
     def __init__(self, database_url: str, embedding_function=None):
         self.engine = create_async_engine(_to_asyncpg(database_url), echo=False, pool_pre_ping=True)
         self.session = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
-        # Reuse a pre-existing embedding function (e.g. ChromaDB's) to avoid
-        # loading a second copy of the model — important on memory-limited hosts.
+        # Reuse a pre-existing local embedding function (ChromaDB's) only as a
+        # fallback. Preferred path is the OpenAI embeddings API, which keeps the
+        # process memory footprint tiny (no local model) so memory-limited free
+        # tiers don't OOM when embedding a whole document at once.
         self._ef = embedding_function
+        self._openai = None
+        self._openai_model = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        key = os.environ.get("OPENAI_API_KEY", "")
+        if key:
+            try:
+                from openai import AsyncOpenAI
+                self._openai = AsyncOpenAI(api_key=key)
+            except Exception:
+                self._openai = None
 
     @property
     def ef(self):
-        """Embedding function — reuses the shared model when one was supplied."""
+        """Local embedding function — fallback only when OpenAI is unavailable."""
         if self._ef is None:
             from chromadb.utils import embedding_functions
             self._ef = embedding_functions.DefaultEmbeddingFunction()
@@ -80,7 +92,16 @@ class PgRagStore:
             await conn.run_sync(RagBase.metadata.create_all)  # create-only, never dropped
 
     async def _embed(self, texts: List[str]) -> List[List[float]]:
-        # Embedding is CPU-bound — run off the event loop.
+        # Preferred: OpenAI embeddings API — no local model, minimal memory.
+        if self._openai is not None:
+            out: List[List[float]] = []
+            # Batch to stay well within request limits.
+            for i in range(0, len(texts), 100):
+                batch = texts[i:i + 100]
+                resp = await self._openai.embeddings.create(model=self._openai_model, input=batch)
+                out.extend([d.embedding for d in resp.data])
+            return out
+        # Fallback: local model (CPU-bound — run off the event loop).
         def _run():
             return [list(map(float, v)) for v in self.ef(texts)]
         return await asyncio.to_thread(_run)
