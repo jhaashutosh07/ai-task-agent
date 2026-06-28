@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Literal, List, Dict, Any, Optional
 from datetime import datetime
+
+from .pipeline import run_chat, stream_chat
 
 router = APIRouter()
 
@@ -23,6 +26,8 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     events: List[Dict[str, Any]] = []
+    citations: List[Dict[str, Any]] = []
+    meta: Dict[str, Any] = {}
     execution_time: float = 0.0
 
 
@@ -83,80 +88,31 @@ async def get_info():
     }
 
 
-# Chat
+# Chat — unified intelligent pipeline (cache → route → RAG → agents → reflect)
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    orchestrator = _components.get("orchestrator")
-    if not orchestrator:
-        raise HTTPException(status_code=500, detail="Orchestrator not initialized")
-
-    events = []
-    start_time = datetime.now()
-
-    def on_event(event):
-        events.append(event.to_dict())
-
-    orchestrator.add_event_handler(on_event)
-
-    try:
-        # Inject RAG context if documents are available
-        augmented = request.message
-        rag = _components.get("rag_pipeline")
-        if rag:
-            ctx = await rag.build_context(request.message)
-            if ctx:
-                augmented = f"{ctx}\n\nUser question: {request.message}"
-        result = await orchestrator.execute(augmented)
-
-        execution_time = (datetime.now() - start_time).total_seconds()
-
-        # Determine the response text, surfacing provider/agent errors clearly
-        output = (result.output or "").strip()
-        if not output:
-            output = _friendly_error_message(getattr(result, "error", None), events)
-
-        # Store in memory
-        vector_memory = _components.get("vector_memory")
-        if vector_memory and result.output:
-            await vector_memory.add(
-                content=f"Task: {request.message}\nResult: {result.output[:500]}",
-                memory_type="conversation"
-            )
-
-        return ChatResponse(
-            response=output,
-            events=events,
-            execution_time=execution_time
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    result = await run_chat(_components, request.message)
+    return ChatResponse(
+        response=result["response"],
+        events=result.get("events", []),
+        citations=result.get("citations", []),
+        meta=result.get("meta", {}),
+        execution_time=result.get("execution_time", 0.0),
+    )
 
 
-def _friendly_error_message(error: Optional[str], events: List[Dict[str, Any]]) -> str:
-    """Turn raw provider/agent errors into a clear, user-facing message."""
-    # Fall back to the last error event if no explicit error was returned
-    raw = error or ""
-    if not raw:
-        for ev in reversed(events):
-            if ev.get("type", "").endswith("_error"):
-                raw = str(ev.get("data", {}).get("error", ""))
-                break
-
-    low = raw.lower()
-    if "credit balance is too low" in low or "billing" in low:
-        return (
-            "⚠️ **The AI provider account is out of credits.**\n\n"
-            "The request reached the model provider, but the account has no remaining "
-            "balance. Please add credits (or switch `LLM_PROVIDER` to another configured "
-            "provider) and try again."
-        )
-    if "rate limit" in low or "429" in low:
-        return "⚠️ The AI provider is rate-limiting requests right now. Please wait a moment and try again."
-    if "authentication" in low or "invalid x-api-key" in low or "401" in low or "api key" in low:
-        return "⚠️ The AI provider rejected the API key. Please check the provider credentials in the backend configuration."
-    if raw:
-        return f"⚠️ The request could not be completed: {raw}"
-    return "⚠️ The agent could not produce a response. Please try rephrasing your request."
+@router.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """Server-Sent Events stream: emits meta, stage, step, token, citations, done."""
+    return StreamingResponse(
+        stream_chat(_components, request.message),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/chat/clear")
@@ -662,6 +618,41 @@ async def get_agent_activity(limit: int = 100):
             for r in records
         ]
     }
+
+# ─── Observability & Cache ───────────────────────────────────────────────────
+
+@router.get("/observability/traces")
+async def get_traces(limit: int = 50):
+    """Recent request traces (route, cache hit, RAG, latency, pipeline stages)."""
+    tracer = _components.get("tracer")
+    if not tracer:
+        return {"traces": []}
+    return {"traces": tracer.recent(limit=limit)}
+
+
+@router.get("/observability/metrics")
+async def get_obs_metrics():
+    """Aggregate pipeline metrics for the observability dashboard."""
+    tracer = _components.get("tracer")
+    cache = _components.get("semantic_cache")
+    metrics = tracer.metrics() if tracer else {}
+    metrics["cache"] = cache.stats() if cache else {}
+    return metrics
+
+
+@router.get("/cache/stats")
+async def cache_stats():
+    cache = _components.get("semantic_cache")
+    return cache.stats() if cache else {"enabled": False}
+
+
+@router.post("/cache/clear")
+async def cache_clear():
+    cache = _components.get("semantic_cache")
+    if not cache:
+        return {"cleared": 0}
+    return {"cleared": cache.clear()}
+
 
 # ─── RAG Endpoints ────────────────────────────────────────────────────────────
 

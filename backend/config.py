@@ -43,6 +43,12 @@ class Settings(BaseSettings):
 
     rag_db_path: str = Field(default="./data/ragdb")
 
+    # Advanced intelligence layer
+    enable_reflection: bool = Field(default=True)
+    enable_semantic_cache: bool = Field(default=True)
+    cache_db_path: str = Field(default="./data/cache")
+    semantic_cache_threshold: float = Field(default=0.93)
+
     # Workflow Settings
     workflows_path: str = Field(default="./data/workflows")
     max_workflow_steps: int = Field(default=50)

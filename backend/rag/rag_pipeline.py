@@ -1,10 +1,22 @@
 import json
+import re
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
 from .document_processor import chunk_text, process_document
+
+_WORD_RE = re.compile(r"[a-z0-9]+")
+_STOPWORDS = {
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for", "is",
+    "are", "was", "were", "be", "with", "as", "by", "at", "this", "that", "it",
+    "what", "how", "why", "when", "which", "who", "do", "does", "i", "you",
+}
+
+
+def _tokenize(text: str) -> List[str]:
+    return [w for w in _WORD_RE.findall(text.lower()) if w not in _STOPWORDS and len(w) > 1]
 
 try:
     import chromadb
@@ -138,16 +150,93 @@ class RAGPipeline:
                 )
         return out
 
-    async def build_context(self, query: str, n_results: int = 5) -> str:
-        chunks = await self.query(query, n_results=n_results)
+    async def hybrid_query(self, query: str, n_results: int = 5, doc_id: str = None) -> List[DocumentChunk]:
+        """
+        Hybrid retrieval + reranking.
+
+        1. Pull a larger candidate pool via dense vector search (semantic).
+        2. Score the same candidates with a lexical/keyword signal (term coverage).
+        3. Fuse the two rankings with Reciprocal Rank Fusion (RRF) so a chunk that
+           is strong on *either* signal floats to the top.
+
+        Returns the top `n_results` reranked chunks, each carrying a fused `score`.
+        """
+        pool = max(n_results * 4, 12)
+        candidates = await self.query(query, n_results=pool, doc_id=doc_id)
+        if not candidates:
+            return []
+
+        q_terms = set(_tokenize(query))
+
+        # Vector ranking (already ordered best-first by Chroma).
+        vector_rank = {c.id: i for i, c in enumerate(candidates)}
+
+        # Lexical ranking by term coverage of the query.
+        def lexical_score(chunk: DocumentChunk) -> float:
+            if not q_terms:
+                return 0.0
+            c_terms = _tokenize(chunk.content)
+            if not c_terms:
+                return 0.0
+            counts = {}
+            for t in c_terms:
+                counts[t] = counts.get(t, 0) + 1
+            covered = sum(1 for t in q_terms if t in counts)
+            freq = sum(counts.get(t, 0) for t in q_terms)
+            # coverage dominates, frequency breaks ties (saturating)
+            return covered + min(freq, len(q_terms)) / (len(q_terms) + 1)
+
+        lexical_sorted = sorted(candidates, key=lexical_score, reverse=True)
+        lexical_rank = {c.id: i for i, c in enumerate(lexical_sorted)}
+
+        # Reciprocal Rank Fusion.
+        k = 60
+        fused: Dict[str, float] = {}
+        for c in candidates:
+            rrf = 1.0 / (k + vector_rank.get(c.id, pool)) + 1.0 / (k + lexical_rank.get(c.id, pool))
+            fused[c.id] = rrf
+
+        for c in candidates:
+            # Blend the human-readable semantic score with the fusion signal.
+            c.score = round(0.5 * c.score + 0.5 * (fused[c.id] / (2.0 / (k + 1))), 4)
+
+        reranked = sorted(candidates, key=lambda c: fused[c.id], reverse=True)
+        return reranked[:n_results]
+
+    async def retrieve_with_citations(
+        self, query: str, n_results: int = 5
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """
+        Returns (context_string, citations).
+        The context is annotated with [1], [2]… markers and the model is instructed
+        to cite them. `citations` is a list the API/UI can render as sources.
+        """
+        chunks = await self.hybrid_query(query, n_results=n_results)
         if not chunks:
-            return ""
-        parts = ["### Relevant context from your documents:"]
-        for chunk in chunks:
+            return "", []
+
+        parts = [
+            "### Context from the user's documents",
+            "Use the sources below to answer. Cite them inline with [n] markers.",
+            "",
+        ]
+        citations: List[Dict[str, Any]] = []
+        for i, chunk in enumerate(chunks, start=1):
             fname = chunk.metadata.get("filename", "document")
-            parts.append(f"\n**[{fname}]** (relevance: {chunk.score:.0%})\n{chunk.content}")
+            parts.append(f"[{i}] (source: {fname}) {chunk.content}")
+            citations.append({
+                "n": i,
+                "filename": fname,
+                "chunk_index": chunk.metadata.get("chunk_index"),
+                "score": round(chunk.score, 4),
+                "snippet": chunk.content[:240] + ("…" if len(chunk.content) > 240 else ""),
+            })
         parts.append("---")
-        return "\n".join(parts)
+        return "\n".join(parts), citations
+
+    async def build_context(self, query: str, n_results: int = 5) -> str:
+        context, _ = await self.retrieve_with_citations(query, n_results=n_results)
+        return context
 
     async def delete_document(self, doc_id: str) -> bool:
         if doc_id not in self.documents:

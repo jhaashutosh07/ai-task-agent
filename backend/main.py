@@ -27,6 +27,8 @@ from agents import (
 )
 from memory import VectorMemory, ConversationMemory, KnowledgeBase
 from rag import RAGPipeline
+from intelligence import SemanticCache, IntentRouter, ReflectionEngine
+from observability import init_tracer
 from workflows import WorkflowEngine, WorkflowManager, WorkflowScheduler
 from api.routes import router, set_components
 from api.websocket import websocket_endpoint
@@ -71,7 +73,11 @@ components = {
     "workflow_manager": None,
     "scheduler": None,
     "rag_pipeline": None,
-    "conversation_memory": None
+    "conversation_memory": None,
+    "semantic_cache": None,
+    "intent_router": None,
+    "reflection_engine": None,
+    "tracer": None
 }
 
 
@@ -198,6 +204,19 @@ def initialize_rag():
     components["rag_pipeline"] = RAGPipeline(settings.rag_db_path)
     print("Initialized RAG pipeline")
 
+
+def initialize_intelligence():
+    """Semantic cache, intent router, reflection engine, and request tracer."""
+    if settings.enable_semantic_cache:
+        components["semantic_cache"] = SemanticCache(
+            persist_path=settings.cache_db_path,
+            threshold=settings.semantic_cache_threshold,
+        )
+    components["intent_router"] = IntentRouter(llm=components["llm"])
+    components["reflection_engine"] = ReflectionEngine(llm=components["llm"])
+    components["tracer"] = init_tracer()
+    print("Initialized intelligence layer (cache, router, reflection, tracing)")
+
 async def initialize_all():
     print("\n" + "=" * 50)
     print("Initializing AI Task Automation Agent v2.0")
@@ -213,6 +232,7 @@ async def initialize_all():
     initialize_workflows()
 
     initialize_rag()
+    initialize_intelligence()
     set_components(components)
 
     print("\n" + "=" * 50)
