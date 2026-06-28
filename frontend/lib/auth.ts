@@ -8,6 +8,42 @@ const ACCESS_TOKEN_KEY = 'ai_agent_access_token';
 const REFRESH_TOKEN_KEY = 'ai_agent_refresh_token';
 const USER_KEY = 'ai_agent_user';
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The backend runs on a free tier that spins down when idle. The first request
+// after a while can return 502/503 (or briefly refuse the connection) while it
+// wakes up. Retry transient failures with backoff so sign-in succeeds instead
+// of failing on a cold start. `onRetry` lets the UI show a "waking up" message.
+let authWakeListener: (() => void) | null = null;
+export function onAuthWaking(cb: (() => void) | null): void {
+  authWakeListener = cb;
+}
+
+async function resilientFetch(url: string, opts: RequestInit, retries = 6): Promise<Response> {
+  let lastErr: any;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const r = await fetch(url, opts);
+      if ([502, 503, 504].includes(r.status) && i < retries) {
+        authWakeListener?.();
+        await sleep(4000 + i * 2000);
+        continue;
+      }
+      return r;
+    } catch (e) {
+      lastErr = e;
+      if (i < retries) { authWakeListener?.(); await sleep(4000 + i * 2000); continue; }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
+async function parseError(r: Response, fallback: string): Promise<string> {
+  try { const j = await r.json(); return j.detail || fallback; }
+  catch { return `Server is starting up — please try again in a moment (HTTP ${r.status}).`; }
+}
+
 // Types
 export interface User {
   id: string;
@@ -103,15 +139,19 @@ export function getAuthHeaders(): HeadersInit {
 
 // API calls
 export async function login(credentials: LoginCredentials): Promise<AuthTokens> {
-  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(credentials),
-  });
+  let response: Response;
+  try {
+    response = await resilientFetch(`${API_BASE}${API_PREFIX}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+    });
+  } catch {
+    throw new Error('Could not reach the server. Please check your connection and try again.');
+  }
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Login failed');
+    throw new Error(await parseError(response, 'Login failed'));
   }
 
   const tokens = await response.json();
@@ -120,15 +160,19 @@ export async function login(credentials: LoginCredentials): Promise<AuthTokens> 
 }
 
 export async function register(data: RegisterData): Promise<User> {
-  const response = await fetch(`${API_BASE}${API_PREFIX}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  let response: Response;
+  try {
+    response = await resilientFetch(`${API_BASE}${API_PREFIX}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  } catch {
+    throw new Error('Could not reach the server. Please check your connection and try again.');
+  }
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Registration failed');
+    throw new Error(await parseError(response, 'Registration failed'));
   }
 
   return response.json();

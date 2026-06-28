@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, User, Eye, EyeOff, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
-import { register, login, getCurrentUser } from "@/lib/auth";
+import { register, login, getCurrentUser, onAuthWaking } from "@/lib/auth";
 import { useStore } from "@/lib/store";
 
 export default function RegisterPage() {
@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [waking, setWaking] = useState(false);
 
   const reqs = [
     { ok: form.password.length >= 8, text: "At least 8 characters" },
@@ -26,6 +27,8 @@ export default function RegisterPage() {
     setError("");
     if (form.password !== form.confirm) return setError("Passwords do not match");
     setLoading(true);
+    setWaking(false);
+    onAuthWaking(() => setWaking(true));
     try {
       await register({ email: form.email, username: form.username, password: form.password });
       await login({ email: form.email, password: form.password });
@@ -33,7 +36,7 @@ export default function RegisterPage() {
       if (user) { setUser(user); router.push("/chat"); }
     } catch (err: any) {
       setError(err.message || "Registration failed");
-    } finally { setLoading(false); }
+    } finally { setLoading(false); setWaking(false); onAuthWaking(null); }
   };
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -144,8 +147,13 @@ export default function RegisterPage() {
 
             <button type="submit" disabled={loading}
               className="w-full py-3 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-medium text-sm transition-all flex items-center justify-center gap-2 shadow-glow mt-1">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Creating account…</> : "Create account"}
+              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />{waking ? "Waking up server…" : "Creating account…"}</> : "Create account"}
             </button>
+            {waking && (
+              <p className="text-xs text-zinc-400 text-center">
+                The free-tier server was asleep — this first request can take up to a minute. It'll finish automatically.
+              </p>
+            )}
           </form>
 
           <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, Loader2, Sparkles, Zap, Brain, GitBranch } from "lucide-react";
-import { login, getCurrentUser } from "@/lib/auth";
+import { login, getCurrentUser, onAuthWaking } from "@/lib/auth";
 import { useStore } from "@/lib/store";
 
 const features = [
@@ -22,11 +22,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [waking, setWaking] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
+    setWaking(false);
+    onAuthWaking(() => setWaking(true));
     try {
       await login({ email, password });
       const user = await getCurrentUser();
@@ -35,6 +38,8 @@ export default function LoginPage() {
       setError(err.message || "Invalid credentials");
     } finally {
       setLoading(false);
+      setWaking(false);
+      onAuthWaking(null);
     }
   };
 
@@ -140,8 +145,14 @@ export default function LoginPage() {
               type="submit" disabled={loading}
               className="w-full py-3 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-medium text-sm transition-all flex items-center justify-center gap-2 shadow-glow mt-2"
             >
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Signing in…</> : "Sign in"}
+              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />{waking ? "Waking up server…" : "Signing in…"}</> : "Sign in"}
             </button>
+
+            {waking && (
+              <p className="text-xs text-zinc-400 text-center -mt-1">
+                The free-tier server was asleep — first sign-in can take up to a minute. Hang tight, it'll log you in automatically.
+              </p>
+            )}
           </form>
 
           <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
