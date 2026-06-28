@@ -41,6 +41,7 @@ class RAGPipeline:
         self.persist_path = Path(persist_path)
         self.persist_path.mkdir(parents=True, exist_ok=True)
         self.documents: Dict[str, Dict] = {}
+        self.pg_store = None  # durable PostgreSQL store (set via init_store)
         self._load_doc_index()
 
         if CHROMA_AVAILABLE:
@@ -55,6 +56,22 @@ class RAGPipeline:
         else:
             self.client = None
             self.collection = None
+
+    async def init_store(self):
+        """Enable durable PostgreSQL storage when a DATABASE_URL is configured."""
+        import os
+        db_url = os.environ.get("DATABASE_URL", "")
+        if not db_url:
+            return  # local dev → keep ChromaDB on disk
+        try:
+            from .pg_store import PgRagStore
+            store = PgRagStore(db_url)
+            await store.init()
+            self.pg_store = store
+            print("RAG: using durable PostgreSQL store")
+        except Exception as e:
+            print(f"RAG: PostgreSQL store unavailable, falling back to ChromaDB ({e})")
+            self.pg_store = None
 
     def _load_doc_index(self):
         f = self.persist_path / "doc_index.json"
@@ -83,6 +100,11 @@ class RAGPipeline:
         chunks = chunk_text(text)
         if not chunks:
             raise ValueError("Document produced no chunks after processing.")
+
+        # Durable PostgreSQL path (survives restarts on ephemeral hosts).
+        if self.pg_store:
+            await self.pg_store.add_chunks(doc_id, filename, detected_type, chunks)
+            return {"doc_id": doc_id, "filename": filename, "chunks": len(chunks), "characters": len(text)}
 
         chunk_ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
         chunk_metas = [
@@ -121,6 +143,9 @@ class RAGPipeline:
     async def query(
         self, query: str, n_results: int = 5, doc_id: str = None
     ) -> List[DocumentChunk]:
+        if self.pg_store:
+            rows = await self.pg_store.query(query, n_results=n_results, doc_id=doc_id)
+            return [DocumentChunk(id=r["id"], content=r["content"], metadata=r["metadata"], score=r["score"]) for r in rows]
         if not CHROMA_AVAILABLE or not self.collection:
             return []
         try:
@@ -239,6 +264,8 @@ class RAGPipeline:
         return context
 
     async def delete_document(self, doc_id: str) -> bool:
+        if self.pg_store:
+            return await self.pg_store.delete_document(doc_id)
         if doc_id not in self.documents:
             return False
         if CHROMA_AVAILABLE and self.collection:
@@ -251,10 +278,16 @@ class RAGPipeline:
         self._save_doc_index()
         return True
 
-    def list_documents(self) -> List[Dict]:
+    async def list_documents(self) -> List[Dict]:
+        if self.pg_store:
+            return await self.pg_store.list_documents()
         return list(self.documents.values())
 
-    def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> Dict[str, Any]:
+        if self.pg_store:
+            stats = await self.pg_store.stats()
+            stats["storage"] = "postgresql"
+            return stats
         count = 0
         if CHROMA_AVAILABLE and self.collection:
             try:

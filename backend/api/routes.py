@@ -679,7 +679,7 @@ async def list_rag_documents():
     rag = _components.get("rag_pipeline")
     if not rag:
         return {"documents": []}
-    return {"documents": rag.list_documents()}
+    return {"documents": await rag.list_documents()}
 
 
 @router.delete("/rag/documents/{doc_id}")
@@ -714,4 +714,4 @@ async def get_rag_stats():
     rag = _components.get("rag_pipeline")
     if not rag:
         return {"documents": 0, "total_chunks": 0, "storage": "unavailable"}
-    return rag.get_stats()
+    return await rag.get_stats()

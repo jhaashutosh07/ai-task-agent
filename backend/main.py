@@ -232,6 +232,7 @@ async def initialize_all():
     initialize_workflows()
 
     initialize_rag()
+    await components["rag_pipeline"].init_store()
     initialize_intelligence()
     set_components(components)
 
