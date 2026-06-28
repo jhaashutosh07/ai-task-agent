@@ -26,8 +26,13 @@ The system is grounded in the user's own data through a **Retrieval-Augmented Ge
 
 | Category | Highlights |
 |----------|------------|
+| ⚡ **Real-Time Streaming** | Server-Sent Events stream tokens *and* live agent steps to the UI as they happen |
+| 🧭 **Intelligent Routing** | An intent classifier sends small talk to a fast conversational path and complex work to the multi-agent system |
+| 🔁 **Self-Reflection** | A Reflexion-style critique loop reviews and refines answers before they're returned |
+| 🗂️ **Semantic Cache** | Embedding-similarity response cache that cuts latency & LLM cost on repeated/paraphrased queries |
+| 📈 **Observability** | Built-in request tracer with pipeline spans + aggregate metrics (latency p95, cache-hit rate, intent mix) |
 | 🤖 **Multi-Agent System** | Orchestrator decomposes tasks and delegates to Researcher, Coder, Analyst & Executor agents |
-| 📚 **RAG Pipeline** | Upload PDF/TXT/MD/HTML → chunk → embed → ChromaDB → retrieve relevant context per query |
+| 📚 **Production RAG** | Hybrid retrieval (dense + lexical) with **Reciprocal Rank Fusion** reranking and inline **source citations** |
 | 🧠 **Long-Term Memory** | Vector memory + conversation memory + a structured knowledge base |
 | 🔌 **15+ Tools** | Web search/browse, code & shell execution, file ops, API calls, PDF reading, email, and more |
 | 🔀 **Multi-LLM Support** | Anthropic Claude, OpenAI GPT, Google Gemini, and local Ollama — with automatic fallback |
@@ -35,7 +40,33 @@ The system is grounded in the user's own data through a **Retrieval-Augmented Ge
 | ⏰ **Scheduling** | Run workflows on cron / interval / date triggers |
 | 🔐 **Auth & Security** | JWT access/refresh tokens, role-based access, rate limiting, human-in-the-loop for dangerous actions |
 | 📊 **Analytics** | Token usage, cost tracking per provider/model, and an agent activity timeline |
-| 🎨 **Premium UI** | Next.js 14 + Tailwind, dark mode, streaming-style chat, markdown & code rendering |
+| 🎨 **Premium UI** | Next.js 14 + Tailwind, dark mode, token-by-token streaming chat, citations & markdown/code rendering |
+
+### 🧠 The Intelligent Chat Pipeline
+
+Every message flows through a single, observable pipeline that picks the cheapest correct path:
+
+```
+            ┌──────────────┐   hit   ┌───────────────────┐
+ message ──▶│ Semantic Cache├────────▶│ stream cached reply│
+            └──────┬───────┘          └───────────────────┘
+                   │ miss
+                   ▼
+            ┌──────────────┐
+            │ Intent Router│──── chat ──▶ Conversational LLM (token streaming)
+            └──────┬───────┘
+                   │ task
+                   ▼
+   ┌───────────────────────────┐     ┌──────────────┐     ┌──────────────┐
+   │ RAG: hybrid retrieve +    │────▶│ Orchestrator │────▶│ Self-Reflect │──▶ stream
+   │ RRF rerank + citations    │     │  + agents    │     │  & refine    │
+   └───────────────────────────┘     └──────────────┘     └──────────────┘
+                   │
+                   ▼  (every step recorded)
+            ┌──────────────┐
+            │   Tracer     │──▶ /observability/metrics + /traces
+            └──────────────┘
+```
 
 ---
 
@@ -126,8 +157,16 @@ ai-task-agent/
 │   │   ├── researcher.py  coder.py  analyst.py  executor.py
 │   │   └── base_agent.py
 │   ├── rag/                    # ── RAG pipeline ──
-│   │   ├── rag_pipeline.py     #   ChromaDB ingest / query / context
+│   │   ├── rag_pipeline.py     #   ingest + hybrid retrieve + RRF rerank + citations
 │   │   └── document_processor.py  # chunking & text extraction
+│   ├── intelligence/           # ── advanced intelligence layer ──
+│   │   ├── semantic_cache.py   #   embedding-similarity response cache
+│   │   ├── router.py           #   intent classifier (chat vs task)
+│   │   └── reflection.py       #   self-critique / refinement loop
+│   ├── observability/          # request tracer + aggregate metrics
+│   ├── api/
+│   │   ├── pipeline.py         #   unified chat pipeline (JSON + SSE streaming)
+│   │   └── routes.py           #   REST + SSE endpoints
 │   ├── tools/                  # 15+ sandboxed tools
 │   ├── memory/                 # vector memory · conversation · knowledge base
 │   ├── llm/                    # provider abstraction + cost tracker
@@ -211,13 +250,22 @@ The frontend reads a single variable, `NEXT_PUBLIC_API_URL`, pointing to the bac
 **Chat & RAG**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/chat` | Send a message to the agent system (RAG-augmented) |
+| POST | `/chat` | Send a message through the full pipeline (cache → route → RAG → agents → reflect) |
+| POST | `/chat/stream` | **SSE stream** of `meta` / `stage` / `step` / `token` / `citations` / `done` events |
 | POST | `/chat/clear` | Clear conversation memory |
 | POST | `/rag/ingest` | Upload a document into the vector store |
 | GET  | `/rag/documents` | List ingested documents |
 | DELETE | `/rag/documents/{id}` | Remove a document |
-| POST | `/rag/query` | Semantic search over documents |
+| POST | `/rag/query` | Hybrid semantic search over documents |
 | GET  | `/rag/stats` | Vector store statistics |
+
+**Observability & Cache**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET  | `/observability/metrics` | Aggregate pipeline metrics (latency p95, cache-hit rate, intent mix) |
+| GET  | `/observability/traces` | Recent request traces with pipeline spans |
+| GET  | `/cache/stats` | Semantic cache statistics |
+| POST | `/cache/clear` | Flush the semantic cache |
 
 **Memory · Workflows · Tools · Analytics**
 | Method | Endpoint | Description |
@@ -264,9 +312,12 @@ uvicorn main:app --host 0.0.0.0 --port $PORT --loop asyncio
 
 ## 🗺️ Roadmap
 
-- [ ] Token-level streaming responses over WebSocket
-- [ ] Per-document citations in chat answers
-- [ ] Hybrid (keyword + vector) retrieval and re-ranking
+- [x] Token-level streaming responses (Server-Sent Events)
+- [x] Per-document citations in chat answers
+- [x] Hybrid (keyword + vector) retrieval with RRF reranking
+- [x] Semantic response caching & request observability
+- [x] Intent routing + self-reflection loop
+- [ ] Cross-encoder neural reranker (when off free-tier memory limits)
 - [ ] Collaborative multi-user workspaces
 - [ ] Plugin SDK for custom tools
 
