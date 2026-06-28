@@ -62,15 +62,16 @@ class RAGPipeline:
         import os
         db_url = os.environ.get("DATABASE_URL", "")
         if not db_url:
+            print("RAG: DATABASE_URL not set → using local ChromaDB (ephemeral)")
             return  # local dev → keep ChromaDB on disk
         try:
             from .pg_store import PgRagStore
             store = PgRagStore(db_url)
             await store.init()
             self.pg_store = store
-            print("RAG: using durable PostgreSQL store")
+            print("RAG: using durable PostgreSQL store ✓")
         except Exception as e:
-            print(f"RAG: PostgreSQL store unavailable, falling back to ChromaDB ({e})")
+            print(f"RAG: PostgreSQL store unavailable, falling back to ChromaDB ({type(e).__name__}: {e})")
             self.pg_store = None
 
     def _load_doc_index(self):

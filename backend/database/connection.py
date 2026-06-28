@@ -32,9 +32,17 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 
 async def init_db():
-    """Initialize the database — drop and recreate tables to apply schema changes."""
+    """Initialize the database — create tables if missing.
+
+    NOTE: intentionally does NOT drop tables, so user accounts and data persist
+    across deploys/restarts. Set RESET_DB=true to force a one-off schema reset
+    (e.g. after a breaking model change).
+    """
+    reset = os.environ.get("RESET_DB", "").lower() in ("1", "true", "yes")
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        if reset:
+            await conn.run_sync(Base.metadata.drop_all)
+            print("Database reset (RESET_DB enabled)")
         await conn.run_sync(Base.metadata.create_all)
     print("Database initialized")
 
