@@ -66,9 +66,13 @@ class RAGPipeline:
             return  # local dev → keep ChromaDB on disk
         try:
             from .pg_store import PgRagStore
-            store = PgRagStore(db_url)
+            # Reuse ChromaDB's already-loaded embedding model (saves ~90MB RAM).
+            ef = getattr(self.collection, "_embedding_function", None) if self.collection else None
+            store = PgRagStore(db_url, embedding_function=ef)
             await store.init()
             self.pg_store = store
+            # Release the now-unused local ChromaDB RAG collection to free memory.
+            self.collection = None
             print("RAG: using durable PostgreSQL store ✓")
         except Exception as e:
             print(f"RAG: PostgreSQL store unavailable, falling back to ChromaDB ({type(e).__name__}: {e})")

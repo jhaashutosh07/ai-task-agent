@@ -60,14 +60,16 @@ def _to_asyncpg(url: str) -> str:
 
 
 class PgRagStore:
-    def __init__(self, database_url: str):
+    def __init__(self, database_url: str, embedding_function=None):
         self.engine = create_async_engine(_to_asyncpg(database_url), echo=False, pool_pre_ping=True)
         self.session = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
-        self._ef = None
+        # Reuse a pre-existing embedding function (e.g. ChromaDB's) to avoid
+        # loading a second copy of the model — important on memory-limited hosts.
+        self._ef = embedding_function
 
     @property
     def ef(self):
-        """Lazily create ChromaDB's default embedding function (shared model)."""
+        """Embedding function — reuses the shared model when one was supplied."""
         if self._ef is None:
             from chromadb.utils import embedding_functions
             self._ef = embedding_functions.DefaultEmbeddingFunction()
