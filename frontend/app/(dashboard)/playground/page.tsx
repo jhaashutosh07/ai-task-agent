@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Swords, Loader2, Zap, Trophy, AlertCircle, Send } from "lucide-react";
+import { Swords, Loader2, Zap, Trophy, AlertCircle, Send, Compass } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { getProviderStatus, compareProviders } from "@/lib/api";
+import { getProviderStatus, compareProviders, routePreview } from "@/lib/api";
 
 const FREE = new Set(["groq", "openrouter", "cerebras", "gemini", "ollama"]);
 const COLORS: Record<string, string> = {
@@ -23,6 +23,15 @@ export default function PlaygroundPage() {
   const [prompt, setPrompt] = useState("Explain what a vector database is in 2 sentences.");
   const [results, setResults] = useState<Result[]>([]);
   const [running, setRunning] = useState(false);
+  const [route, setRoute] = useState<any>(null);
+  const [routing, setRouting] = useState(false);
+
+  const doRoute = async () => {
+    if (!prompt.trim() || routing) return;
+    setRouting(true); setRoute(null);
+    try { setRoute(await routePreview(prompt)); } catch { /* ignore */ }
+    setRouting(false);
+  };
 
   useEffect(() => {
     getProviderStatus().then((p) => {
@@ -84,12 +93,30 @@ export default function PlaygroundPage() {
               {FREE.has(n) && <span className="text-[9px] font-bold text-emerald-500">FREE</span>}
             </button>
           ))}
+          <button onClick={doRoute} disabled={routing || !prompt.trim()}
+            className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-primary-300 text-sm font-medium transition-colors">
+            {routing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Compass className="w-4 h-4" />}
+            Smart route
+          </button>
           <button onClick={race} disabled={running || selected.size === 0 || !prompt.trim()}
-            className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white text-sm font-semibold transition-colors">
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white text-sm font-semibold transition-colors">
             {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             {running ? "Racing…" : "Race models"}
           </button>
         </div>
+
+        {route && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/20 px-4 py-3 animate-slide-up">
+            <Compass className="w-4 h-4 text-primary-500" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">{route.complexity}</span>
+            <span className="text-sm text-zinc-700 dark:text-zinc-200">
+              → routed to <b className="capitalize">{route.chosen_provider}</b>
+              {route.chosen_model && <span className="text-zinc-400 font-mono text-xs"> ({route.chosen_model})</span>}
+              {route.is_free && <span className="ml-1.5 text-[10px] font-bold text-emerald-500">FREE</span>}
+            </span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400 flex-1 min-w-[200px]">{route.reason}</span>
+          </div>
+        )}
         {available.length <= 1 && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
             Only one provider is configured. Add a free key (Groq / OpenRouter / Cerebras) to compare more.

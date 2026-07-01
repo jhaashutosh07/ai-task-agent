@@ -4,10 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import {
   Sparkles, Send, Loader2, Trash2, FileText,
   Search, Code2, BarChart3, Workflow, Zap,
-  Mic, MicOff, Volume2, VolumeX,
+  Mic, MicOff, Volume2, VolumeX, ImagePlus, X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { streamChat, clearChat, getRagStats } from "@/lib/api";
+import { streamChat, clearChat, getRagStats, visionChat } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { AgentEvent, Citation, ChatMeta } from "@/lib/types";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -71,8 +71,10 @@ export default function ChatInterface() {
   const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
   const [docCount, setDocCount] = useState(0);
   const [voiceOut, setVoiceOut] = useState(false);
+  const [image, setImage] = useState<{ file: File; url: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const voiceOutRef = useRef(false);
   useEffect(() => { voiceOutRef.current = voiceOut; }, [voiceOut]);
 
@@ -103,7 +105,27 @@ export default function ChatInterface() {
 
   const send = async (text?: string) => {
     const msg = (text ?? input).trim();
-    if (!msg || isLoading) return;
+    if ((!msg && !image) || isLoading) return;
+
+    // Vision path: an image is attached → analyse it with the vision model.
+    if (image) {
+      const prompt = msg || "Describe this image in detail.";
+      const url = image.url;
+      const file = image.file;
+      setInput(""); setImage(null);
+      if (taRef.current) taRef.current.style.height = "auto";
+      addMessage({ role: "user", content: prompt, images: [url] });
+      setStream({ ...EMPTY_STREAM, active: true, stage: "generating" });
+      try {
+        const res = await visionChat(file, prompt);
+        addMessage({ role: "assistant", content: res.response || "_(no description)_", meta: { intent: "vision" } as any });
+        if (voiceOutRef.current && res.response) speak(forSpeech(res.response));
+      } catch (e: any) {
+        addMessage({ role: "assistant", content: `⚠️ ${e?.message || "Vision failed"}` });
+      }
+      setStream(EMPTY_STREAM);
+      return;
+    }
 
     setInput("");
     if (taRef.current) taRef.current.style.height = "auto";
@@ -220,7 +242,9 @@ export default function ChatInterface() {
           </div>
         ) : (
           <div className="px-4 sm:px-6 py-6 max-w-3xl mx-auto flex flex-col gap-5">
-            {messages.map((m) => <MessageBubble key={m.id} message={m} />)}
+            {messages.map((m, i) => (
+              <MessageBubble key={m.id} message={m} question={m.role === "assistant" ? messages[i - 1]?.content : undefined} />
+            ))}
 
             {/* Live streaming bubble */}
             {stream.active && (
@@ -268,7 +292,27 @@ export default function ChatInterface() {
       {/* Composer */}
       <div className="border-t border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md px-4 sm:px-6 py-4">
         <div className="max-w-3xl mx-auto">
+          {image && (
+            <div className="mb-2 inline-flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 pr-3">
+              <img src={image.url} alt="attachment" className="w-10 h-10 rounded-lg object-cover" />
+              <span className="text-xs text-zinc-500 max-w-[160px] truncate">{image.file.name}</span>
+              <button onClick={() => setImage(null)} className="text-zinc-400 hover:text-rose-500"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) setImage({ file: f, url: URL.createObjectURL(f) });
+            e.target.value = "";
+          }} />
           <form onSubmit={(e) => { e.preventDefault(); send(); }} className="flex items-end gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 glow-focus transition-shadow">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              title="Attach an image (vision)"
+              className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 transition-colors"
+            >
+              <ImagePlus className="w-4.5 h-4.5" />
+            </button>
             {micSupported && (
               <button
                 type="button"
@@ -292,7 +336,7 @@ export default function ChatInterface() {
               rows={1}
               className="flex-1 resize-none bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none max-h-44"
             />
-            <button type="submit" disabled={!input.trim() || isLoading} className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors" aria-label="Send message">
+            <button type="submit" disabled={(!input.trim() && !image) || isLoading} className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors" aria-label="Send message">
               {isLoading ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <Send className="w-4.5 h-4.5" />}
             </button>
           </form>

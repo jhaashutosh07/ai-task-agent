@@ -4,10 +4,42 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   User, Sparkles, ChevronDown, Wrench, Check, X,
-  Zap, FileText, RefreshCw,
+  Zap, FileText, RefreshCw, Gauge, Loader2,
 } from "lucide-react";
 import { Message, AgentEvent, Citation, ChatMeta } from "@/lib/types";
+import { evaluateAnswer } from "@/lib/api";
 import CodeBlock from "./CodeBlock";
+
+function EvalButton({ question, answer, context }: { question: string; answer: string; context: string }) {
+  const [loading, setLoading] = useState(false);
+  const [res, setRes] = useState<any>(null);
+  const run = async () => {
+    setLoading(true);
+    try { setRes(await evaluateAnswer(question, answer, context)); } catch { /* ignore */ }
+    setLoading(false);
+  };
+  const color = (s: number) => (s >= 4 ? "text-emerald-500" : s >= 2.5 ? "text-amber-500" : "text-rose-500");
+  if (res) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+        {(["faithfulness", "relevance", "completeness"] as const).map((k) => (
+          <span key={k} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
+            <span className="text-zinc-400 capitalize">{k.slice(0, 4)}</span>
+            <span className={`font-semibold ${color(res.scores?.[k] || 0)}`}>{(res.scores?.[k] || 0).toFixed(1)}</span>
+          </span>
+        ))}
+        <span className={`font-semibold ${color(res.overall)}`}>★ {res.overall}/5</span>
+        {res.verdict && <span className="text-zinc-400 italic">— {res.verdict}</span>}
+      </div>
+    );
+  }
+  return (
+    <button onClick={run} disabled={loading} className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 hover:text-primary-500 transition-colors">
+      {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Gauge className="w-3 h-3" />}
+      {loading ? "Evaluating…" : "Evaluate answer"}
+    </button>
+  );
+}
 
 // Map raw orchestrator/agent event types to readable step labels.
 function stepLabel(e: AgentEvent): string | null {
@@ -119,11 +151,12 @@ function MetaBadges({ meta }: { meta?: ChatMeta }) {
   );
 }
 
-export default function MessageBubble({ message }: { message: Message }) {
+export default function MessageBubble({ message, question }: { message: Message; question?: string }) {
   const isUser = message.role === "user";
   const content = message.content || "";
   const events = message.events || [];
   const citations = message.citations || [];
+  const images = message.images || [];
   const time = (() => {
     try { return new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
     catch { return ""; }
@@ -140,6 +173,13 @@ export default function MessageBubble({ message }: { message: Message }) {
       </div>
 
       <div className={`max-w-[78%] flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
+        {images.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-1">
+            {images.map((src, i) => (
+              <img key={i} src={src} alt="attachment" className="max-w-[220px] max-h-[220px] rounded-xl border border-zinc-200 dark:border-zinc-800 object-cover" />
+            ))}
+          </div>
+        )}
         <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
           isUser
             ? "bg-primary-600 text-white rounded-tr-sm"
@@ -176,6 +216,9 @@ export default function MessageBubble({ message }: { message: Message }) {
         {!isUser && <MetaBadges meta={message.meta} />}
         {!isUser && citations.length > 0 && <Sources citations={citations} />}
         {!isUser && events.length > 0 && <AgentActivity events={events} />}
+        {!isUser && question && content && !content.startsWith("⚠️") && content.length > 24 && (
+          <EvalButton question={question} answer={content} context={citations.map((c) => c.snippet).join("\n")} />
+        )}
         {time && <span className="text-xs text-zinc-400 px-1">{time}</span>}
       </div>
     </div>

@@ -176,6 +176,57 @@ export async function compareProviders(message: string, providers: string[] = []
   return r.json();
 }
 
+// Vision (multimodal)
+export async function visionChat(file: File, prompt: string): Promise<{ response: string; model: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("prompt", prompt || "Describe this image in detail.");
+  const token = getAccessToken();
+  const headers: HeadersInit = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const r = await fetch(`${API_BASE}${API_PREFIX}/vision`, { method: "POST", headers, body: form });
+  if (!r.ok) throw new Error((await r.json()).detail || "Vision request failed");
+  return r.json();
+}
+
+// Knowledge graph
+export async function getKnowledgeGraph(query?: string): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/knowledge-graph`, {
+    method: "POST",
+    body: JSON.stringify({ query: query || "main topics and entities", n_results: 8 }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail || "Graph extraction failed");
+  return r.json();
+}
+
+// Smart auto-routing preview
+export async function routePreview(message: string): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/route/preview`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+  return r.json();
+}
+
+// Answer evaluation (LLM-as-judge)
+export async function evaluateAnswer(question: string, answer: string, context = ""): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/evaluate`, {
+    method: "POST",
+    body: JSON.stringify({ question, answer, context }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail || "Evaluation failed");
+  return r.json();
+}
+
+// Guardrails (PII + jailbreak)
+export async function guardrailsCheck(message: string): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/guardrails/check`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+  return r.json();
+}
+
 // Memory API
 export async function searchMemory(query: string, limit: number = 5): Promise<any> {
   const url = `${API_BASE}${API_PREFIX}/memory/search?query=${encodeURIComponent(query)}&limit=${limit}`;

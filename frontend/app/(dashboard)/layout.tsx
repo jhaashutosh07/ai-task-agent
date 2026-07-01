@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Sparkles, MessageSquare, LayoutDashboard, GitBranch,
-  Wrench, Settings, Menu, X, LogOut, ChevronRight, FileText, Swords,
+  Wrench, Settings, Menu, X, LogOut, ChevronRight, FileText, Swords, Share2,
 } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
 import { useStore } from "@/lib/store";
@@ -16,6 +16,7 @@ const navItems = [
   { href: "/chat",      label: "Chat",       icon: MessageSquare,  badge: null },
   { href: "/dashboard", label: "Dashboard",  icon: LayoutDashboard, badge: null },
   { href: "/documents", label: "Documents",  icon: FileText,        badge: "RAG" },
+  { href: "/knowledge-graph", label: "Knowledge Graph", icon: Share2, badge: null },
   { href: "/playground", label: "Playground", icon: Swords,         badge: "NEW" },
   { href: "/workflows", label: "Workflows",  icon: GitBranch,       badge: null },
   { href: "/tools",     label: "Tools",      icon: Wrench,          badge: null },
