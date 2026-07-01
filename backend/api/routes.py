@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Literal, List, Dict, Any, Optional
@@ -160,6 +160,197 @@ async def compare_providers(request: CompareRequest):
     results = await asyncio.gather(*[run(n) for n in names])
     results.sort(key=lambda r: (r["error"] is not None, r["latency_ms"]))
     return {"message": request.message, "results": results}
+
+
+# ─── Vision (multimodal) ─────────────────────────────────────────────────────
+
+@router.post("/vision")
+async def vision_chat(
+    prompt: str = Form("Describe this image in detail. Note any text, objects, and context."),
+    file: UploadFile = File(...),
+):
+    """Analyse an uploaded image with a vision-capable model (GPT-4o)."""
+    import base64
+    pm = _components.get("provider_manager")
+    if not pm or "openai" not in pm.list_providers():
+        raise HTTPException(status_code=400, detail="Vision requires an OpenAI provider to be configured.")
+    provider = pm.get_provider("openai")
+    model = provider.model if getattr(provider, "supports_vision", False) else "gpt-4o-mini"
+    content = await file.read()
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (max 8MB).")
+    b64 = base64.b64encode(content).decode()
+    mime = file.content_type or "image/jpeg"
+    try:
+        resp = await provider.client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+            ]}],
+            max_tokens=900,
+        )
+        return {"response": resp.choices[0].message.content or "", "model": model}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Vision request failed: {type(e).__name__}: {e}")
+
+
+# ─── Knowledge Graph ─────────────────────────────────────────────────────────
+
+@router.post("/knowledge-graph")
+async def knowledge_graph(request: RAGQueryRequest = None):
+    """Extract an entity–relationship knowledge graph from ingested documents."""
+    import json as _json
+    rag = _components.get("rag_pipeline")
+    llm = _components.get("llm")
+    if not rag or not llm:
+        raise HTTPException(status_code=500, detail="RAG or LLM not initialised")
+
+    query = (request.query if request else None) or "main topics, entities, people, and concepts"
+    chunks = await rag.query(query, n_results=8)
+    if not chunks:
+        return {"nodes": [], "edges": [], "note": "No documents ingested yet."}
+
+    text = "\n\n".join(c.content for c in chunks)[:6000]
+    from llm.base import Message
+    prompt = (
+        "Extract a knowledge graph from the text below. Identify the key entities "
+        "(people, organisations, concepts, technologies, places) and the relationships "
+        "between them. Respond with ONLY valid JSON of the form:\n"
+        '{"nodes":[{"id":"n1","label":"Name","type":"concept|person|org|tech|place"}],'
+        '"edges":[{"source":"n1","target":"n2","label":"relationship"}]}\n'
+        "Keep it to the 12 most important entities.\n\nText:\n" + text
+    )
+    try:
+        resp = await llm.chat([Message(role="user", content=prompt)])
+        raw = resp.content or ""
+        s, e = raw.find("{"), raw.rfind("}") + 1
+        data = _json.loads(raw[s:e]) if s >= 0 and e > s else {"nodes": [], "edges": []}
+        return {
+            "nodes": data.get("nodes", [])[:20],
+            "edges": data.get("edges", [])[:40],
+            "sources": len(chunks),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Graph extraction failed: {e}")
+
+
+# ─── Smart Auto-Routing ──────────────────────────────────────────────────────
+
+class RouteRequest(BaseModel):
+    message: str
+
+
+@router.post("/route/preview")
+async def route_preview(request: RouteRequest):
+    """Classify a prompt's difficulty and pick the optimal model (cost-aware)."""
+    from llm.base import Message
+    llm = _components.get("llm")
+    pm = _components.get("provider_manager")
+    available = pm.list_providers() if pm else []
+
+    complexity = "moderate"
+    try:
+        if llm:
+            r = await llm.chat([Message(role="user", content=(
+                "Classify the difficulty of answering this request as exactly one word: "
+                "'simple' (greeting/definition/short factual), 'moderate' (explanation/short code), "
+                "or 'complex' (multi-step reasoning, research, long code, analysis).\n\n"
+                f"Request: {request.message}\n\nAnswer with one word only."
+            ))])
+            w = (r.content or "").strip().lower()
+            complexity = "simple" if "simple" in w else "complex" if "complex" in w else "moderate"
+    except Exception:
+        pass
+
+    # Preference order per tier (first available wins)
+    tiers = {
+        "simple":   ["groq", "cerebras", "gemini", "openai", "openrouter"],
+        "moderate": ["openai", "groq", "gemini", "anthropic", "cerebras"],
+        "complex":  ["anthropic", "openai", "openrouter", "gemini", "groq"],
+    }
+    chosen = next((p for p in tiers[complexity] if p in available), (available[0] if available else "openai"))
+    model = getattr(pm.get_provider(chosen), "model", "") if pm and chosen in available else ""
+    cost = getattr(pm.get_provider(chosen), "cost_per_1k_tokens", (0.0, 0.0)) if pm and chosen in available else (0.0, 0.0)
+    reason = {
+        "simple": "Lightweight query → routed to the fastest / cheapest capable model.",
+        "moderate": "Standard query → balanced model for quality and cost.",
+        "complex": "Hard multi-step task → routed to the strongest reasoning model.",
+    }[complexity]
+    return {
+        "complexity": complexity,
+        "chosen_provider": chosen,
+        "chosen_model": model,
+        "cost_per_1k": {"input": cost[0], "output": cost[1]},
+        "is_free": chosen in {"groq", "openrouter", "cerebras", "gemini", "ollama"},
+        "reason": reason,
+    }
+
+
+# ─── Answer Evaluation + Guardrails ──────────────────────────────────────────
+
+class EvaluateRequest(BaseModel):
+    question: str
+    answer: str
+    context: str = ""
+
+
+_PII_PATTERNS = {
+    "email": r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+",
+    "phone": r"\b(?:\+?\d[\d -]{8,}\d)\b",
+    "ssn": r"\b\d{3}-\d{2}-\d{4}\b",
+    "credit_card": r"\b(?:\d[ -]*?){13,16}\b",
+}
+_JAILBREAK = [
+    "ignore previous instructions", "ignore all previous", "disregard the above",
+    "you are now", "developer mode", "jailbreak", "do anything now", "dan mode",
+    "bypass your", "without any restrictions",
+]
+
+
+@router.post("/guardrails/check")
+async def guardrails_check(request: RouteRequest):
+    """Scan input text for PII and prompt-injection / jailbreak attempts."""
+    import re as _re
+    text = request.message or ""
+    low = text.lower()
+    pii = [name for name, pat in _PII_PATTERNS.items() if _re.search(pat, text)]
+    jb = [p for p in _JAILBREAK if p in low]
+    return {
+        "safe": not jb,
+        "pii_detected": pii,
+        "jailbreak_flags": jb,
+        "risk": "high" if jb else ("medium" if pii else "low"),
+    }
+
+
+@router.post("/evaluate")
+async def evaluate_answer(request: EvaluateRequest):
+    """LLM-as-judge: score an answer for faithfulness, relevance and completeness."""
+    import json as _json
+    from llm.base import Message
+    llm = _components.get("llm")
+    if not llm:
+        raise HTTPException(status_code=500, detail="LLM not initialised")
+    ctx = f"\nReference context:\n{request.context}\n" if request.context else ""
+    prompt = (
+        "You are a strict evaluator. Score the assistant's answer on three axes from 1-5 "
+        "(5 = excellent). Respond with ONLY JSON: "
+        '{"faithfulness":n,"relevance":n,"completeness":n,"verdict":"one short sentence"}.\n'
+        "faithfulness = supported by context / not hallucinated; relevance = answers the question; "
+        "completeness = thorough.\n"
+        f"\nQuestion:\n{request.question}\n{ctx}\nAnswer:\n{request.answer}\n"
+    )
+    try:
+        r = await llm.chat([Message(role="user", content=prompt)])
+        raw = r.content or ""
+        s, e = raw.find("{"), raw.rfind("}") + 1
+        data = _json.loads(raw[s:e]) if s >= 0 and e > s else {}
+        scores = {k: float(data.get(k, 0)) for k in ("faithfulness", "relevance", "completeness")}
+        overall = round(sum(scores.values()) / 3, 2) if scores else 0.0
+        return {"scores": scores, "overall": overall, "verdict": data.get("verdict", "")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {e}")
 
 
 @router.post("/chat/clear")
