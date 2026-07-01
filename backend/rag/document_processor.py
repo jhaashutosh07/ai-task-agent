@@ -19,9 +19,13 @@ def chunk_text(text: str, chunk_size: int = 800, overlap: int = 150) -> List[str
         chunk = text[start:end].strip()
         if chunk:
             chunks.append(chunk)
-        start = end - overlap
-        if start >= len(text):
+        # Reached the end of the document → done. (This guard is essential:
+        # without it, the tail chunk repeats forever because `end - overlap`
+        # stops advancing, growing the list until the process runs out of memory.)
+        if end >= len(text):
             break
+        # Always make forward progress, even if the overlap would stall us.
+        start = max(end - overlap, start + 1)
     return chunks
 
 
