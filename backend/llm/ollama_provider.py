@@ -24,11 +24,15 @@ class OllamaProvider(BaseLLM):
                 "content": msg.content
             })
 
-        # Build request payload
+        # Build request payload. keep_alive=-1 keeps the model resident so we
+        # don't pay the cold-load penalty; num_predict caps output length so a
+        # slow CPU box don't run past request timeouts.
         payload = {
             "model": self.model,
             "messages": ollama_messages,
-            "stream": stream
+            "stream": stream,
+            "keep_alive": -1,
+            "options": {"num_predict": 400},
         }
 
         # Add tools if provided (Ollama supports function calling)

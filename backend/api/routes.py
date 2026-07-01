@@ -137,8 +137,10 @@ async def compare_providers(request: CompareRequest):
         t0 = time.time()
         try:
             p = pm.get_provider(name)
+            # Local models on CPU (Ollama) are slower — give them more headroom.
+            tmo = 85 if name == "ollama" else 45
             resp = await asyncio.wait_for(
-                p.chat([LMessage(role="user", content=request.message)]), timeout=60
+                p.chat([LMessage(role="user", content=request.message)]), timeout=tmo
             )
             cost = getattr(p, "cost_per_1k_tokens", (0.0, 0.0)) or (0.0, 0.0)
             return {
