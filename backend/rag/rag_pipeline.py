@@ -266,6 +266,20 @@ class RAGPipeline:
             c.score = round(0.5 * c.score + 0.5 * (fused[c.id] / (2.0 / (k + 1))), 4)
 
         reranked = sorted(candidates, key=lambda c: fused[c.id], reverse=True)
+
+        # Optional third stage: cross-encoder neural reranking over the fused
+        # top candidates (much stronger relevance; degrades to RRF if disabled
+        # or the model is unavailable).
+        if os.environ.get("ENABLE_RERANKER", "true").lower() in ("1", "true", "yes"):
+            try:
+                from .reranker import get_reranker
+                top = reranked[: max(n_results * 3, 8)]
+                ranked = await get_reranker().rerank(query, top, top_k=n_results)
+                if ranked:
+                    return ranked
+            except Exception:
+                pass
+
         return reranked[:n_results]
 
     async def retrieve_with_citations(

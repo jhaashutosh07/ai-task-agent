@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Literal, List, Dict, Any, Optional
 from datetime import datetime
 
 from .pipeline import run_chat, stream_chat
+from auth.dependencies import get_current_active_user
+from auth.models import User
 
 router = APIRouter()
 
@@ -353,6 +355,112 @@ async def evaluate_answer(request: EvaluateRequest):
         return {"scores": scores, "overall": overall, "verdict": data.get("verdict", "")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Evaluation failed: {e}")
+
+
+# ─── Collaborative Workspaces ────────────────────────────────────────────────
+
+class WorkspaceCreate(BaseModel):
+    name: str
+
+
+class InviteRequest(BaseModel):
+    username: str
+
+
+@router.post("/workspaces")
+async def create_workspace_ep(req: WorkspaceCreate, user: User = Depends(get_current_active_user)):
+    from database import extras
+    if not req.name.strip():
+        raise HTTPException(status_code=400, detail="Workspace name required")
+    return await extras.create_workspace(req.name.strip(), user.id, user.username)
+
+
+@router.get("/workspaces")
+async def list_workspaces_ep(user: User = Depends(get_current_active_user)):
+    from database import extras
+    return {"workspaces": await extras.list_workspaces(user.id)}
+
+
+@router.post("/workspaces/{workspace_id}/invite")
+async def invite_member_ep(workspace_id: str, req: InviteRequest, user: User = Depends(get_current_active_user)):
+    from database import extras
+    from database.connection import get_user_by_username
+    if not await extras.is_member(workspace_id, user.id):
+        raise HTTPException(status_code=403, detail="Not a member of this workspace")
+    invitee = await get_user_by_username(req.username.strip())
+    if not invitee:
+        raise HTTPException(status_code=404, detail=f"No user named '{req.username}'")
+    added = await extras.add_member(workspace_id, invitee.id, invitee.username)
+    return {"added": added, "username": invitee.username}
+
+
+@router.get("/workspaces/{workspace_id}/members")
+async def list_members_ep(workspace_id: str, user: User = Depends(get_current_active_user)):
+    from database import extras
+    if not await extras.is_member(workspace_id, user.id):
+        raise HTTPException(status_code=403, detail="Not a member of this workspace")
+    return {"members": await extras.list_members(workspace_id)}
+
+
+# ─── Plugin SDK: Custom Tools ────────────────────────────────────────────────
+
+class CustomToolCreate(BaseModel):
+    name: str
+    description: str = ""
+    endpoint_url: str
+    method: str = "POST"
+    params_schema: Dict[str, Any] = {}
+
+
+def _register_custom_tool(rec: Dict[str, Any]):
+    """Add a custom tool into the live tool registry so agents/API can use it."""
+    from tools.custom_tool import CustomHTTPTool
+    tools = _components.get("tools")
+    if tools is None:
+        return
+    tools[rec["name"]] = CustomHTTPTool(
+        name=rec["name"], description=rec.get("description", ""),
+        endpoint_url=rec["endpoint_url"], method=rec.get("method", "POST"),
+        parameters=rec.get("params_schema") or {"type": "object", "properties": {}},
+    )
+
+
+@router.post("/tools/custom")
+async def register_custom_tool(req: CustomToolCreate, user: User = Depends(get_current_active_user)):
+    from database import extras
+    name = req.name.strip().replace(" ", "_")
+    if not name or not req.endpoint_url.strip():
+        raise HTTPException(status_code=400, detail="name and endpoint_url are required")
+    if not req.endpoint_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="endpoint_url must be http(s)")
+    rec = await extras.create_custom_tool(
+        user.id, name, req.description, req.endpoint_url.strip(), req.method.upper(), req.params_schema
+    )
+    _register_custom_tool({
+        "name": name, "description": req.description, "endpoint_url": req.endpoint_url.strip(),
+        "method": req.method.upper(), "params_schema": req.params_schema,
+    })
+    return {"id": rec["id"], "name": name, "status": "registered"}
+
+
+@router.get("/tools/custom")
+async def list_custom_tools_ep(user: User = Depends(get_current_active_user)):
+    from database import extras
+    return {"tools": await extras.list_custom_tools()}
+
+
+@router.delete("/tools/custom/{tool_id}")
+async def delete_custom_tool_ep(tool_id: str, user: User = Depends(get_current_active_user)):
+    from database import extras
+    # find name to remove from live registry
+    for t in await extras.list_custom_tools():
+        if t["id"] == tool_id:
+            _components.get("tools", {}).pop(t["name"], None)
+            break
+    ok = await extras.delete_custom_tool(tool_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Custom tool not found")
+    return {"status": "deleted"}
 
 
 @router.post("/chat/clear")

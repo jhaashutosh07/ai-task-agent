@@ -109,6 +109,24 @@ async def get_user_by_email(email: str) -> Optional[UserInDB]:
         return None
 
 
+async def get_user_by_username(username: str) -> Optional["UserInDB"]:
+    """Look up a user by exact username (used for workspace invites)."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(UserModel).where(UserModel.username == username)
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            return UserInDB(
+                id=user.id, email=user.email, username=user.username,
+                hashed_password=user.hashed_password, role=user.role,
+                is_active=user.is_active, created_at=user.created_at,
+                last_login=user.last_login, usage_quota=user.usage_quota,
+                usage_today=user.usage_today, total_usage=user.total_usage,
+            )
+        return None
+
+
 async def get_user_by_id(user_id: str) -> Optional[User]:
     """Get user by ID"""
     async with async_session() as session:

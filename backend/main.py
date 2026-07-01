@@ -242,6 +242,24 @@ async def initialize_all():
     initialize_rag()
     await components["rag_pipeline"].init_store()
     initialize_intelligence()
+
+    # Collaborative workspaces + custom-tool (plugin) tables, and load any
+    # previously-registered custom tools into the live registry.
+    try:
+        from database.extras import init_extras, list_custom_tools
+        from tools.custom_tool import CustomHTTPTool
+        await init_extras()
+        custom = await list_custom_tools()
+        for t in custom:
+            components["tools"][t["name"]] = CustomHTTPTool(
+                name=t["name"], description=t.get("description", ""),
+                endpoint_url=t["endpoint_url"], method=t.get("method", "POST"),
+                parameters=t.get("params_schema") or {"type": "object", "properties": {}},
+            )
+        print(f"Initialized workspaces + {len(custom)} custom tool(s)")
+    except Exception as e:
+        print(f"Extras init skipped: {e}")
+
     set_components(components)
 
     print("\n" + "=" * 50)

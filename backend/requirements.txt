@@ -30,11 +30,16 @@ seaborn==0.13.2
 requests==2.31.0
 
 # Vector Database & Embeddings
-# (ChromaDB uses onnxruntime for its default embeddings; sentence-transformers
-#  + torch are intentionally omitted to keep the image small — embeddings for
-#  RAG go through the OpenAI API, see rag/pg_store.py.)
+# RAG embeddings go through the OpenAI API (rag/pg_store.py); ChromaDB uses
+# onnxruntime for its default embeddings.
 chromadb==0.4.22
 onnxruntime==1.17.0
+
+# Cross-encoder reranker (CPU-only torch keeps the image lean). Loaded lazily
+# and degrades gracefully to RRF reranking if unavailable — see rag/reranker.py.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.2
+sentence-transformers==2.7.0
 
 # Database
 sqlalchemy==2.0.25
