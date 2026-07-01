@@ -2,9 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps (curl needed to install Ollama)
+# System deps (curl + zstd needed to install Ollama)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl ca-certificates \
+    build-essential curl ca-certificates zstd \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps
