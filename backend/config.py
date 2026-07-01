@@ -29,9 +29,11 @@ class Settings(BaseSettings):
     openrouter_api_key: str = Field(default="")
     cerebras_api_key: str = Field(default="")
 
-    # Ollama Settings
+    # Ollama Settings (local models — disabled by default; set ENABLE_OLLAMA=true
+    # on a machine that is actually running an Ollama server)
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="llama3.2")
+    enable_ollama: bool = Field(default=False)
 
     # Multi-Provider Settings
     fallback_chain: list[str] = Field(default=[

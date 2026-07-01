@@ -33,13 +33,14 @@ class ProviderManager:
         openrouter_api_key: Optional[str] = None,
         cerebras_api_key: Optional[str] = None,
         ollama_base_url: str = "http://localhost:11434",
+        enable_ollama: bool = False,
         default_provider: str = "openai",
         fallback_chain: Optional[list[str]] = None
     ):
         self.providers: dict[str, BaseLLM] = {}
         self.default_provider = default_provider
         self.fallback_chain = fallback_chain or [
-            "openai", "anthropic", "gemini", "groq", "openrouter", "cerebras", "ollama"
+            "openai", "anthropic", "gemini", "groq", "openrouter", "cerebras"
         ]
 
         # Initialize available providers
@@ -86,12 +87,14 @@ class ProviderManager:
             except Exception as e:
                 logger.warning(f"Failed to initialize Cerebras provider: {e}")
 
-        # Ollama is always attempted (local, no API key needed)
-        try:
-            self.providers["ollama"] = OllamaProvider(base_url=ollama_base_url)
-            logger.info("Ollama provider initialized")
-        except Exception as e:
-            logger.warning(f"Failed to initialize Ollama provider: {e}")
+        # Ollama runs local models — only enable it when explicitly turned on
+        # (it can't run on a cloud host, where it would just surface errors).
+        if enable_ollama:
+            try:
+                self.providers["ollama"] = OllamaProvider(base_url=ollama_base_url)
+                logger.info("Ollama provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Ollama provider: {e}")
 
         if not self.providers:
             raise ValueError("No LLM providers could be initialized")
@@ -263,6 +266,7 @@ def init_provider_manager(
     openrouter_api_key: Optional[str] = None,
     cerebras_api_key: Optional[str] = None,
     ollama_base_url: str = "http://localhost:11434",
+    enable_ollama: bool = False,
     default_provider: str = "openai",
     fallback_chain: Optional[list[str]] = None
 ) -> ProviderManager:
@@ -276,6 +280,7 @@ def init_provider_manager(
         openrouter_api_key=openrouter_api_key,
         cerebras_api_key=cerebras_api_key,
         ollama_base_url=ollama_base_url,
+        enable_ollama=enable_ollama,
         default_provider=default_provider,
         fallback_chain=fallback_chain
     )
