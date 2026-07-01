@@ -572,24 +572,27 @@ async def get_provider_status():
 
     from config import settings
 
-    health = await provider_manager.health_check()
+    try:
+        health = await provider_manager.health_check()
+    except Exception:
+        health = {}
+
+    providers = []
+    for name in provider_manager.list_providers():
+        p = provider_manager.get_provider(name)
+        cost = getattr(p, "cost_per_1k_tokens", (0.0, 0.0)) or (0.0, 0.0)
+        providers.append({
+            "name": name,
+            "available": True,
+            "healthy": bool(health.get(name, False)),
+            "supports_vision": bool(getattr(p, "supports_vision", False)),
+            "cost_per_1k": {"input": cost[0], "output": cost[1]},
+        })
 
     return {
-        "providers": [
-            {
-                "name": name,
-                "available": True,
-                "healthy": health.get(name, False),
-                "supports_vision": provider_manager.get_provider(name).supports_vision,
-                "cost_per_1k": {
-                    "input": provider_manager.get_provider(name).cost_per_1k_tokens[0],
-                    "output": provider_manager.get_provider(name).cost_per_1k_tokens[1]
-                }
-            }
-            for name in provider_manager.list_providers()
-        ],
+        "providers": providers,
         "default": settings.llm_provider,
-        "fallback_chain": settings.fallback_chain
+        "fallback_chain": settings.fallback_chain,
     }
 
 
