@@ -94,6 +94,9 @@ def initialize_llm():
         openai_api_key=settings.openai_api_key,
         anthropic_api_key=settings.anthropic_api_key,
         google_api_key=settings.google_api_key,
+        groq_api_key=settings.groq_api_key,
+        openrouter_api_key=settings.openrouter_api_key,
+        cerebras_api_key=settings.cerebras_api_key,
         ollama_base_url=settings.ollama_base_url,
         default_provider=settings.llm_provider,
         fallback_chain=settings.fallback_chain

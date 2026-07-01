@@ -7,7 +7,9 @@ import secrets
 
 class Settings(BaseSettings):
     # LLM Configuration
-    llm_provider: Literal["openai", "ollama", "anthropic", "gemini"] = Field(default="openai")
+    llm_provider: Literal[
+        "openai", "ollama", "anthropic", "gemini", "groq", "openrouter", "cerebras"
+    ] = Field(default="openai")
 
     # OpenAI Settings
     openai_api_key: str = Field(default="")
@@ -22,12 +24,19 @@ class Settings(BaseSettings):
     google_api_key: str = Field(default="")
     gemini_model: str = Field(default="gemini-1.5-pro")
 
+    # Free OpenAI-compatible providers
+    groq_api_key: str = Field(default="")
+    openrouter_api_key: str = Field(default="")
+    cerebras_api_key: str = Field(default="")
+
     # Ollama Settings
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="llama3.2")
 
     # Multi-Provider Settings
-    fallback_chain: list[str] = Field(default=["openai", "anthropic", "gemini", "ollama"])
+    fallback_chain: list[str] = Field(default=[
+        "openai", "anthropic", "gemini", "groq", "openrouter", "cerebras", "ollama"
+    ])
 
     # Agent Settings
     max_iterations: int = Field(default=15)

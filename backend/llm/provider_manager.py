@@ -8,6 +8,7 @@ from .openai_provider import OpenAIProvider
 from .anthropic_provider import AnthropicProvider
 from .gemini_provider import GeminiProvider
 from .ollama_provider import OllamaProvider
+from .openai_compatible import GroqProvider, OpenRouterProvider, CerebrasProvider
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,18 @@ class ProviderManager:
         openai_api_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
         google_api_key: Optional[str] = None,
+        groq_api_key: Optional[str] = None,
+        openrouter_api_key: Optional[str] = None,
+        cerebras_api_key: Optional[str] = None,
         ollama_base_url: str = "http://localhost:11434",
         default_provider: str = "openai",
         fallback_chain: Optional[list[str]] = None
     ):
         self.providers: dict[str, BaseLLM] = {}
         self.default_provider = default_provider
-        self.fallback_chain = fallback_chain or ["openai", "anthropic", "gemini", "ollama"]
+        self.fallback_chain = fallback_chain or [
+            "openai", "anthropic", "gemini", "groq", "openrouter", "cerebras", "ollama"
+        ]
 
         # Initialize available providers
         if openai_api_key:
@@ -57,6 +63,28 @@ class ProviderManager:
                 logger.info("Gemini provider initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini provider: {e}")
+
+        # Free, OpenAI-compatible providers
+        if groq_api_key:
+            try:
+                self.providers["groq"] = GroqProvider(api_key=groq_api_key)
+                logger.info("Groq provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Groq provider: {e}")
+
+        if openrouter_api_key:
+            try:
+                self.providers["openrouter"] = OpenRouterProvider(api_key=openrouter_api_key)
+                logger.info("OpenRouter provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenRouter provider: {e}")
+
+        if cerebras_api_key:
+            try:
+                self.providers["cerebras"] = CerebrasProvider(api_key=cerebras_api_key)
+                logger.info("Cerebras provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Cerebras provider: {e}")
 
         # Ollama is always attempted (local, no API key needed)
         try:
@@ -231,6 +259,9 @@ def init_provider_manager(
     openai_api_key: Optional[str] = None,
     anthropic_api_key: Optional[str] = None,
     google_api_key: Optional[str] = None,
+    groq_api_key: Optional[str] = None,
+    openrouter_api_key: Optional[str] = None,
+    cerebras_api_key: Optional[str] = None,
     ollama_base_url: str = "http://localhost:11434",
     default_provider: str = "openai",
     fallback_chain: Optional[list[str]] = None
@@ -241,6 +272,9 @@ def init_provider_manager(
         openai_api_key=openai_api_key,
         anthropic_api_key=anthropic_api_key,
         google_api_key=google_api_key,
+        groq_api_key=groq_api_key,
+        openrouter_api_key=openrouter_api_key,
+        cerebras_api_key=cerebras_api_key,
         ollama_base_url=ollama_base_url,
         default_provider=default_provider,
         fallback_chain=fallback_chain

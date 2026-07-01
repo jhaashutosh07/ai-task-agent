@@ -3,6 +3,7 @@ from .openai_provider import OpenAIProvider
 from .ollama_provider import OllamaProvider
 from .anthropic_provider import AnthropicProvider
 from .gemini_provider import GeminiProvider
+from .openai_compatible import GroqProvider, OpenRouterProvider, CerebrasProvider
 from .provider_manager import (
     ProviderManager,
     get_provider_manager,
@@ -24,6 +25,9 @@ __all__ = [
     "OllamaProvider",
     "AnthropicProvider",
     "GeminiProvider",
+    "GroqProvider",
+    "OpenRouterProvider",
+    "CerebrasProvider",
     "ProviderManager",
     "get_provider_manager",
     "init_provider_manager",

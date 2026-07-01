@@ -146,6 +146,27 @@ export async function getInfo(): Promise<any> {
   return response.json();
 }
 
+// Analytics & Observability (real data for the dashboard)
+export async function getUsageAnalytics(days: number = 30): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/analytics/usage?days=${days}`);
+  return r.json();
+}
+
+export async function getProviderStatus(): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/analytics/providers`);
+  return r.json();
+}
+
+export async function getObservabilityMetrics(): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/observability/metrics`);
+  return r.json();
+}
+
+export async function getAgentActivity(limit: number = 50): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/analytics/agent-activity?limit=${limit}`);
+  return r.json();
+}
+
 // Memory API
 export async function searchMemory(query: string, limit: number = 5): Promise<any> {
   const url = `${API_BASE}${API_PREFIX}/memory/search?query=${encodeURIComponent(query)}&limit=${limit}`;

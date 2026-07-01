@@ -22,8 +22,13 @@ class OpenAIProvider(BaseLLM):
     # Models that support vision
     VISION_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision-preview"]
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
-        self.client = AsyncOpenAI(api_key=api_key)
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str | None = None):
+        # base_url lets OpenAI-compatible providers (Groq, OpenRouter, Cerebras,
+        # Together, etc.) reuse this same implementation.
+        if base_url:
+            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        else:
+            self.client = AsyncOpenAI(api_key=api_key)
         self.model = model
 
     @property
