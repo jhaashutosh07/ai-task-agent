@@ -98,6 +98,7 @@ def initialize_llm():
         openrouter_api_key=settings.openrouter_api_key,
         cerebras_api_key=settings.cerebras_api_key,
         ollama_base_url=settings.ollama_base_url,
+        ollama_model=settings.ollama_model,
         enable_ollama=settings.enable_ollama,
         default_provider=settings.llm_provider,
         fallback_chain=settings.fallback_chain

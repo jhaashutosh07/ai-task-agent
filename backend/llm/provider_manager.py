@@ -33,6 +33,7 @@ class ProviderManager:
         openrouter_api_key: Optional[str] = None,
         cerebras_api_key: Optional[str] = None,
         ollama_base_url: str = "http://localhost:11434",
+        ollama_model: str = "llama3.2",
         enable_ollama: bool = False,
         default_provider: str = "openai",
         fallback_chain: Optional[list[str]] = None
@@ -91,8 +92,8 @@ class ProviderManager:
         # (it can't run on a cloud host, where it would just surface errors).
         if enable_ollama:
             try:
-                self.providers["ollama"] = OllamaProvider(base_url=ollama_base_url)
-                logger.info("Ollama provider initialized")
+                self.providers["ollama"] = OllamaProvider(base_url=ollama_base_url, model=ollama_model)
+                logger.info(f"Ollama provider initialized (model: {ollama_model})")
             except Exception as e:
                 logger.warning(f"Failed to initialize Ollama provider: {e}")
 
@@ -266,6 +267,7 @@ def init_provider_manager(
     openrouter_api_key: Optional[str] = None,
     cerebras_api_key: Optional[str] = None,
     ollama_base_url: str = "http://localhost:11434",
+    ollama_model: str = "llama3.2",
     enable_ollama: bool = False,
     default_provider: str = "openai",
     fallback_chain: Optional[list[str]] = None
@@ -280,6 +282,7 @@ def init_provider_manager(
         openrouter_api_key=openrouter_api_key,
         cerebras_api_key=cerebras_api_key,
         ollama_base_url=ollama_base_url,
+        ollama_model=ollama_model,
         enable_ollama=enable_ollama,
         default_provider=default_provider,
         fallback_chain=fallback_chain
