@@ -115,6 +115,53 @@ async def chat_stream(request: ChatRequest):
     )
 
 
+class CompareRequest(BaseModel):
+    message: str
+    providers: List[str] = []
+
+
+@router.post("/compare")
+async def compare_providers(request: CompareRequest):
+    """Run the same prompt across multiple LLM providers concurrently and compare
+    response, speed and (approx) cost — powers the model comparison playground."""
+    import asyncio, time
+    from llm.base import Message as LMessage
+
+    pm = _components.get("provider_manager")
+    if not pm:
+        raise HTTPException(status_code=500, detail="Provider manager not initialized")
+
+    names = [n for n in (request.providers or pm.list_providers()) if n in pm.list_providers()]
+
+    async def run(name: str):
+        t0 = time.time()
+        try:
+            p = pm.get_provider(name)
+            resp = await asyncio.wait_for(
+                p.chat([LMessage(role="user", content=request.message)]), timeout=60
+            )
+            cost = getattr(p, "cost_per_1k_tokens", (0.0, 0.0)) or (0.0, 0.0)
+            return {
+                "provider": name,
+                "model": getattr(p, "model", ""),
+                "response": (resp.content or "").strip(),
+                "latency_ms": round((time.time() - t0) * 1000),
+                "cost_per_1k": {"input": cost[0], "output": cost[1]},
+                "error": None,
+            }
+        except Exception as e:
+            return {
+                "provider": name, "model": getattr(pm.get_provider(name), "model", "") if name in pm.list_providers() else "",
+                "response": "", "latency_ms": round((time.time() - t0) * 1000),
+                "cost_per_1k": {"input": 0.0, "output": 0.0},
+                "error": f"{type(e).__name__}: {e}"[:200],
+            }
+
+    results = await asyncio.gather(*[run(n) for n in names])
+    results.sort(key=lambda r: (r["error"] is not None, r["latency_ms"]))
+    return {"message": request.message, "results": results}
+
+
 @router.post("/chat/clear")
 async def clear_chat():
     conv_memory = _components.get("conversation_memory")

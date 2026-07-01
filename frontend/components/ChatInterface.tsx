@@ -3,13 +3,27 @@
 import { useState, useRef, useEffect } from "react";
 import {
   Sparkles, Send, Loader2, Trash2, FileText,
-  Search, Code2, BarChart3, Workflow, Wrench, Zap,
+  Search, Code2, BarChart3, Workflow, Zap,
+  Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { streamChat, clearChat, getRagStats } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { AgentEvent, Citation, ChatMeta } from "@/lib/types";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import MessageBubble from "./MessageBubble";
+import AgentGraph from "./AgentGraph";
+
+// Strip markdown/emoji so text-to-speech reads cleanly.
+function forSpeech(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, " code block ")
+    .replace(/[#*_`>\[\]()]/g, "")
+    .replace(/⚠️/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 const SUGGESTIONS = [
   { icon: Search, title: "Research a topic", prompt: "Research the latest advances in renewable energy and summarise the top 3 breakthroughs.", accent: "from-sky-500 to-blue-600" },
@@ -56,8 +70,19 @@ export default function ChatInterface() {
   const [input, setInput] = useState("");
   const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
   const [docCount, setDocCount] = useState(0);
+  const [voiceOut, setVoiceOut] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const voiceOutRef = useRef(false);
+  useEffect(() => { voiceOutRef.current = voiceOut; }, [voiceOut]);
+
+  const { isListening, isSupported: micSupported, startListening, stopListening } =
+    useSpeechRecognition({
+      onResult: (transcript, isFinal) => {
+        if (isFinal) setInput((p) => (p ? p.trim() + " " : "") + transcript);
+      },
+    });
+  const { speak, cancel: cancelSpeech, isSupported: ttsSupported } = useSpeechSynthesis();
 
   const isLoading = stream.active;
 
@@ -108,6 +133,7 @@ export default function ChatInterface() {
             citations: d.citations?.length ? d.citations : citations,
             meta: { ...meta, latency_ms: d.latency_ms },
           });
+          if (voiceOutRef.current && finalContent) speak(forSpeech(finalContent));
           setStream(EMPTY_STREAM);
         },
         onError: (m) => {
@@ -129,9 +155,6 @@ export default function ChatInterface() {
 
   const isEmpty = messages.length === 0 && !stream.active;
   const name = user?.username ? user.username.split(" ")[0] : "there";
-  const liveSteps = stream.steps
-    .map((e) => e.data?.description || e.agent || e.type)
-    .filter(Boolean);
 
   return (
     <div className="flex flex-col h-full bg-[rgb(var(--bg))]">
@@ -151,6 +174,15 @@ export default function ChatInterface() {
             <span title={`${docCount} document(s) connected to RAG`} className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/25 px-2.5 py-1 rounded-lg">
               <FileText className="w-3.5 h-3.5" />{docCount} doc{docCount > 1 ? "s" : ""} in context
             </span>
+          )}
+          {ttsSupported && (
+            <button
+              onClick={() => { setVoiceOut((v) => { if (v) cancelSpeech(); return !v; }); }}
+              title={voiceOut ? "Voice replies on" : "Voice replies off"}
+              className={`p-1.5 rounded-lg transition-colors ${voiceOut ? "text-primary-600 bg-primary-50 dark:bg-primary-500/15" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"}`}
+            >
+              {voiceOut ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </button>
           )}
           {messages.length > 0 && (
             <button onClick={handleClear} className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 px-2.5 py-1.5 rounded-lg transition-colors">
@@ -219,11 +251,10 @@ export default function ChatInterface() {
                     )}
                   </div>
 
-                  {/* Live agent steps */}
-                  {liveSteps.length > 0 && (
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-400 px-1">
-                      <Wrench className="w-3 h-3" />
-                      <span className="truncate max-w-[260px]">{liveSteps[liveSteps.length - 1]}</span>
+                  {/* Live multi-agent reasoning graph (task path) */}
+                  {stream.steps.length > 0 && (
+                    <div className="w-full max-w-md mt-1">
+                      <AgentGraph events={stream.steps} />
                     </div>
                   )}
                 </div>
@@ -238,12 +269,26 @@ export default function ChatInterface() {
       <div className="border-t border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md px-4 sm:px-6 py-4">
         <div className="max-w-3xl mx-auto">
           <form onSubmit={(e) => { e.preventDefault(); send(); }} className="flex items-end gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 glow-focus transition-shadow">
+            {micSupported && (
+              <button
+                type="button"
+                onClick={() => (isListening ? stopListening() : startListening())}
+                title={isListening ? "Stop listening" : "Speak your message"}
+                className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  isListening
+                    ? "bg-rose-500 text-white shadow-glow"
+                    : "text-zinc-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10"
+                }`}
+              >
+                {isListening ? <MicOff className="w-4.5 h-4.5" /> : <Mic className="w-4.5 h-4.5" />}
+              </button>
+            )}
             <textarea
               ref={taRef}
               value={input}
               onChange={(e) => { setInput(e.target.value); autosize(); }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Message Nexus AI…  (Shift+Enter for a new line)"
+              placeholder={isListening ? "Listening… speak now" : "Message Nexus AI…  (Shift+Enter for a new line)"}
               rows={1}
               className="flex-1 resize-none bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none max-h-44"
             />

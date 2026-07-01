@@ -167,6 +167,15 @@ export async function getAgentActivity(limit: number = 50): Promise<any> {
   return r.json();
 }
 
+export async function compareProviders(message: string, providers: string[] = []): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/compare`, {
+    method: "POST",
+    body: JSON.stringify({ message, providers }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail || "Compare failed");
+  return r.json();
+}
+
 // Memory API
 export async function searchMemory(query: string, limit: number = 5): Promise<any> {
   const url = `${API_BASE}${API_PREFIX}/memory/search?query=${encodeURIComponent(query)}&limit=${limit}`;

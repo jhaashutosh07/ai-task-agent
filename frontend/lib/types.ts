@@ -39,6 +39,7 @@ export interface AgentEvent {
     error?: string;
     task_id?: string;
     description?: string;
+    agent?: string;
   };
 }
 
