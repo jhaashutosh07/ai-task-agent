@@ -62,7 +62,11 @@ def _to_asyncpg(url: str) -> str:
 
 class PgRagStore:
     def __init__(self, database_url: str, embedding_function=None):
-        self.engine = create_async_engine(_to_asyncpg(database_url), echo=False, pool_pre_ping=True)
+        # statement_cache_size=0 → compatible with connection poolers (Supabase pgbouncer).
+        self.engine = create_async_engine(
+            _to_asyncpg(database_url), echo=False, pool_pre_ping=True,
+            connect_args={"statement_cache_size": 0},
+        )
         self.session = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
         # Reuse a pre-existing local embedding function (ChromaDB's) only as a
         # fallback. Preferred path is the OpenAI embeddings API, which keeps the

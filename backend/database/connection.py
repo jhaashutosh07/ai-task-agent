@@ -26,7 +26,10 @@ else:
     data_dir.mkdir(parents=True, exist_ok=True)
     DATABASE_URL = f"sqlite+aiosqlite:///{settings.auth_db_path}"
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+# Disable asyncpg's prepared-statement cache when talking to a connection
+# pooler (e.g. Supabase pgbouncer) to avoid "prepared statement already exists".
+_connect_args = {"statement_cache_size": 0} if "asyncpg" in DATABASE_URL else {}
+engine = create_async_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
 # Create async session factory
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
