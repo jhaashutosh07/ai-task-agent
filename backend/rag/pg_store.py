@@ -98,14 +98,16 @@ class PgRagStore:
     async def _embed(self, texts: List[str]) -> List[List[float]]:
         # Preferred: OpenAI embeddings API — no local model, minimal memory.
         if self._openai is not None:
+            print(f"[RAG] embedding {len(texts)} chunks via OpenAI", flush=True)
             out: List[List[float]] = []
-            # Batch to stay well within request limits.
             for i in range(0, len(texts), 100):
                 batch = texts[i:i + 100]
                 resp = await self._openai.embeddings.create(model=self._openai_model, input=batch)
                 out.extend([d.embedding for d in resp.data])
+            print(f"[RAG] embedded {len(out)} vectors (dim={len(out[0]) if out else 0})", flush=True)
             return out
         # Fallback: local model (CPU-bound — run off the event loop).
+        print(f"[RAG] embedding {len(texts)} chunks via LOCAL model", flush=True)
         def _run():
             return [list(map(float, v)) for v in self.ef(texts)]
         return await asyncio.to_thread(_run)
@@ -113,6 +115,7 @@ class PgRagStore:
     async def add_chunks(self, doc_id: str, filename: str, file_type: str, chunks: List[str]) -> int:
         embeddings = await self._embed(chunks)
         now = _utcnow()
+        print(f"[RAG] inserting {len(chunks)} rows into Postgres", flush=True)
         async with self.session() as s:
             for i, (text, emb) in enumerate(zip(chunks, embeddings)):
                 s.add(RagChunkModel(
@@ -121,6 +124,7 @@ class PgRagStore:
                     embedding=json.dumps(emb), char_count=len(text), ingested_at=now,
                 ))
             await s.commit()
+        print(f"[RAG] committed {len(chunks)} rows OK", flush=True)
         return len(chunks)
 
     async def query(self, query: str, n_results: int = 5, doc_id: Optional[str] = None) -> List[Dict[str, Any]]:

@@ -671,6 +671,10 @@ async def ingest_document(file: UploadFile = File(...)):
         result = await rag.ingest(content, file.filename)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        import traceback
+        print("[RAG] ingest failed:\n" + traceback.format_exc(), flush=True)
+        raise HTTPException(status_code=500, detail=f"Ingest failed: {type(e).__name__}: {e}")
     return result
 
 
