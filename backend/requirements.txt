@@ -30,8 +30,11 @@ seaborn==0.13.2
 requests==2.31.0
 
 # Vector Database & Embeddings
+# (ChromaDB uses onnxruntime for its default embeddings; sentence-transformers
+#  + torch are intentionally omitted to keep the image small — embeddings for
+#  RAG go through the OpenAI API, see rag/pg_store.py.)
 chromadb==0.4.22
-sentence-transformers==2.3.1
+onnxruntime==1.17.0
 
 # Database
 sqlalchemy==2.0.25

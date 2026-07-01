@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import uuid
 from datetime import datetime
@@ -49,9 +50,26 @@ class RAGPipeline:
                 path=str(self.persist_path),
                 settings=ChromaSettings(anonymized_telemetry=False),
             )
+            # Prefer OpenAI embeddings (fast API call, non-blocking-ish, no heavy
+            # local model). Falls back to ChromaDB's default local model only if
+            # no OpenAI key is configured.
+            ef = None
+            openai_key = os.environ.get("OPENAI_API_KEY", "")
+            if openai_key:
+                try:
+                    from chromadb.utils import embedding_functions
+                    ef = embedding_functions.OpenAIEmbeddingFunction(
+                        api_key=openai_key,
+                        model_name=os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+                    )
+                    print("RAG: ChromaDB using OpenAI embeddings")
+                except Exception as e:
+                    print(f"RAG: OpenAI embedding function unavailable ({e}); using local model")
+                    ef = None
             self.collection = self.client.get_or_create_collection(
                 name="rag_documents",
                 metadata={"hnsw:space": "cosine"},
+                embedding_function=ef,
             )
         else:
             self.client = None
