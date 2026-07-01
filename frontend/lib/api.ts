@@ -227,6 +227,43 @@ export async function guardrailsCheck(message: string): Promise<any> {
   return r.json();
 }
 
+// Collaborative workspaces
+export async function listWorkspaces(): Promise<{ workspaces: any[] }> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/workspaces`);
+  return r.json();
+}
+export async function createWorkspace(name: string): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/workspaces`, { method: "POST", body: JSON.stringify({ name }) });
+  if (!r.ok) throw new Error((await r.json()).detail || "Failed");
+  return r.json();
+}
+export async function inviteMember(workspaceId: string, username: string): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/workspaces/${workspaceId}/invite`, { method: "POST", body: JSON.stringify({ username }) });
+  if (!r.ok) throw new Error((await r.json()).detail || "Failed");
+  return r.json();
+}
+export async function listMembers(workspaceId: string): Promise<{ members: any[] }> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/workspaces/${workspaceId}/members`);
+  return r.json();
+}
+
+// Plugin SDK — custom tools
+export async function listCustomTools(): Promise<{ tools: any[] }> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/tools/custom`);
+  return r.json();
+}
+export async function createCustomTool(payload: {
+  name: string; description: string; endpoint_url: string; method: string; params_schema: any;
+}): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/tools/custom`, { method: "POST", body: JSON.stringify(payload) });
+  if (!r.ok) throw new Error((await r.json()).detail || "Failed");
+  return r.json();
+}
+export async function deleteCustomTool(id: string): Promise<any> {
+  const r = await authFetch(`${API_BASE}${API_PREFIX}/tools/custom/${id}`, { method: "DELETE" });
+  return r.json();
+}
+
 // Memory API
 export async function searchMemory(query: string, limit: number = 5): Promise<any> {
   const url = `${API_BASE}${API_PREFIX}/memory/search?query=${encodeURIComponent(query)}&limit=${limit}`;

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Sparkles, MessageSquare, LayoutDashboard, GitBranch,
   Wrench, Settings, Menu, X, LogOut, ChevronRight, FileText, Swords, Share2,
+  Users, Puzzle,
 } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
 import { useStore } from "@/lib/store";
@@ -18,6 +19,8 @@ const navItems = [
   { href: "/documents", label: "Documents",  icon: FileText,        badge: "RAG" },
   { href: "/knowledge-graph", label: "Knowledge Graph", icon: Share2, badge: null },
   { href: "/playground", label: "Playground", icon: Swords,         badge: "NEW" },
+  { href: "/plugins",   label: "Plugins",    icon: Puzzle,          badge: null },
+  { href: "/team",      label: "Workspaces", icon: Users,           badge: null },
   { href: "/workflows", label: "Workflows",  icon: GitBranch,       badge: null },
   { href: "/tools",     label: "Tools",      icon: Wrench,          badge: null },
   { href: "/settings",  label: "Settings",   icon: Settings,        badge: null },
